@@ -72,3 +72,39 @@ create policy "fotos: somente logados" on storage.objects
   with check (bucket_id = 'fotos');
 
 notify pgrst, 'reload schema';
+
+-- ===== Documentos do carro (seguro, IPVA, CRLV, vistoria...) =====
+create table if not exists public.documentos (
+  id           uuid primary key default gen_random_uuid(),
+  carro_id     uuid not null references public.carros(id) on delete cascade,
+  tipo         text not null check (length(trim(tipo)) between 1 and 60),
+  descricao    text check (descricao is null or length(descricao) <= 200),
+  validade     date,
+  arquivo      text not null,
+  nome_arquivo text not null,
+  criado_em    timestamptz not null default now()
+);
+create index if not exists documentos_carro_idx on public.documentos (carro_id);
+
+alter table public.documentos enable row level security;
+drop policy if exists "somente logados" on public.documentos;
+create policy "somente logados" on public.documentos
+  for all to authenticated
+  using (true) with check (true);
+grant select, insert, update, delete on public.documentos to authenticated;
+
+-- Espaço PRIVADO para os arquivos dos documentos (PDF ou foto reduzida para JPEG, até 10 MB).
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('documentos', 'documentos', false, 10485760, array['application/pdf', 'image/jpeg'])
+on conflict (id) do update
+  set public = false,
+      file_size_limit = excluded.file_size_limit,
+      allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists "documentos: somente logados" on storage.objects;
+create policy "documentos: somente logados" on storage.objects
+  for all to authenticated
+  using (bucket_id = 'documentos')
+  with check (bucket_id = 'documentos');
+
+notify pgrst, 'reload schema';

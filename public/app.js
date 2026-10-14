@@ -4,6 +4,9 @@ const demo = !cfg.SUPABASE_URL || !cfg.SUPABASE_ANON_KEY;
 const PLACA_RE = /^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/;
 const B_PDF = 'contratos';
 const B_FOTOS = 'fotos';
+const B_DOCS = 'documentos';
+const TIPOS_DOC = ['CRLV (documento do carro)', 'Seguro', 'IPVA', 'Licenciamento', 'Contrato de locação',
+  'Vistoria', 'Nota fiscal', 'Manutenção', 'Multa', 'Outro'];
 const MAX_PDF = 10 * 1024 * 1024; // 10 MB, igual ao limite do bucket
 const MAX_FOTOS = 8;              // fotos por carro
 const MAX_FOTO_ORIGINAL = 30 * 1024 * 1024; // limite do arquivo escolhido, antes de reduzir
@@ -14,6 +17,8 @@ const sb = demo ? null : window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPA
 
 const lerDemo = () => { try { return JSON.parse(localStorage.getItem('bhl_demo')) || []; } catch { return []; } };
 const gravarDemo = (l) => { try { localStorage.setItem('bhl_demo', JSON.stringify(l)); } catch { /* sem armazenamento */ } };
+const lerDemoDocs = () => { try { return JSON.parse(localStorage.getItem('bhl_demo_docs')) || []; } catch { return []; } };
+const gravarDemoDocs = (l) => { try { localStorage.setItem('bhl_demo_docs', JSON.stringify(l)); } catch { /* sem armazenamento */ } };
 const arquivosDemo = new Map(); // modo demonstração: arquivos só ficam na memória, até recarregar a página
 
 const erroAmigavel = (e) => (e?.code === '23505' ? 'Já existe um carro com essa placa.' : e?.message || 'Erro inesperado.');
@@ -49,8 +54,31 @@ const dados = {
     if (error) throw error;
   },
   async excluir(id) {
-    if (demo) return gravarDemo(lerDemo().filter((x) => x.id !== id));
+    if (demo) { gravarDemoDocs(lerDemoDocs().filter((x) => x.carro_id !== id)); return gravarDemo(lerDemo().filter((x) => x.id !== id)); }
     const { error } = await sb.from('carros').delete().eq('id', id);
+    if (error) throw error;
+  },
+  // ----- documentos do carro -----
+  async listarDocumentos() {
+    if (demo) return lerDemoDocs();
+    const { data, error } = await sb.from('documentos').select('*').order('criado_em');
+    if (error) throw error;
+    return data;
+  },
+  async salvarDocumento(id, d) {
+    if (demo) {
+      const l = lerDemoDocs();
+      if (id) Object.assign(l.find((x) => x.id === id), d);
+      else l.push({ id: crypto.randomUUID(), criado_em: new Date().toISOString(), ...d });
+      return gravarDemoDocs(l);
+    }
+    const q = id ? sb.from('documentos').update(d).eq('id', id) : sb.from('documentos').insert(d);
+    const { error } = await q;
+    if (error) throw error;
+  },
+  async excluirDocumento(id) {
+    if (demo) return gravarDemoDocs(lerDemoDocs().filter((x) => x.id !== id));
+    const { error } = await sb.from('documentos').delete().eq('id', id);
     if (error) throw error;
   },
   // ----- arquivos (PDF e fotos), em espaços privados do Storage -----
@@ -111,17 +139,17 @@ function celulaFim(d) {
 }
 
 // Reduz a foto (celular costuma gerar 3–10 MB) e converte para JPEG, respeitando a rotação.
-async function reduzirFoto(arquivo) {
+async function reduzirFoto(arquivo, ladoMax = LADO_MAX, qualidade = 0.82) {
   let bmp;
   try { bmp = await createImageBitmap(arquivo, { imageOrientation: 'from-image' }); }
   catch { throw new Error(`Não consegui ler a imagem "${arquivo.name}". Use JPG, PNG ou WebP.`); }
-  const esc = Math.min(1, LADO_MAX / Math.max(bmp.width, bmp.height));
+  const esc = Math.min(1, ladoMax / Math.max(bmp.width, bmp.height));
   const cv = document.createElement('canvas');
   cv.width = Math.max(1, Math.round(bmp.width * esc));
   cv.height = Math.max(1, Math.round(bmp.height * esc));
   cv.getContext('2d').drawImage(bmp, 0, 0, cv.width, cv.height);
   bmp.close?.();
-  const blob = await new Promise((ok) => cv.toBlob(ok, 'image/jpeg', 0.82));
+  const blob = await new Promise((ok) => cv.toBlob(ok, 'image/jpeg', qualidade));
   if (!blob) throw new Error(`Não consegui processar a imagem "${arquivo.name}".`);
   return blob;
 }
@@ -130,19 +158,24 @@ async function reduzirFoto(arquivo) {
 let carros = [];
 let editando = null;
 let miniaturas = new Map(); // caminho da 1ª foto -> URL temporária
+let docs = [];
+let docsErro = '';
+let abaAtual = 'frota';
 const fotosDe = (c) => c.fotos || [];
 
 // Abre a aba antes do await, senão o navegador bloqueia o pop-up.
-async function abrirPdf(caminho) {
+async function abrirArquivo(bucket, caminho) {
   const aba = window.open('about:blank', '_blank');
   if (!aba) return alert('O navegador bloqueou a nova aba. Permita pop-ups para este site e tente de novo.');
   try {
-    const url = (await dados.urlsArquivos(B_PDF, [caminho])).get(caminho);
-    if (!url) throw new Error('Não foi possível abrir o PDF. No modo demonstração ele só fica disponível até recarregar a página.');
+    const url = (await dados.urlsArquivos(bucket, [caminho])).get(caminho);
+    if (!url) throw new Error('Não foi possível abrir o arquivo. No modo demonstração ele só fica disponível até recarregar a página.');
     aba.opener = null;
     aba.location.href = url;
   } catch (e) { aba.close(); alert(erroAmigavel(e)); }
 }
+
+const abrirPdf = (caminho) => abrirArquivo(B_PDF, caminho);
 
 function celulaFoto(c) {
   const fotos = fotosDe(c);
@@ -174,11 +207,17 @@ function desenhar() {
     } else contrato = el('span', { textContent: '—' });
     const editar = el('button', { className: 'link', textContent: 'Editar' });
     editar.onclick = () => abrirForm(c);
+    const qtdDocs = docs.filter((d) => d.carro_id === c.id).length;
+    const verDocs = el('button', { className: 'link', textContent: qtdDocs ? `Documentos (${qtdDocs})` : 'Documentos' });
+    verDocs.onclick = () => irParaDocs(c.id);
     const excluir = el('button', { className: 'perigo', textContent: 'Excluir' });
     excluir.onclick = async () => {
-      if (!confirm(`Excluir ${c.modelo} (${c.placa})?`)) return;
+      const aviso = qtdDocs ? `\n\nOs ${qtdDocs} documento(s) deste carro também serão apagados.` : '';
+      if (!confirm(`Excluir ${c.modelo} (${c.placa})?${aviso}`)) return;
+      const arquivosDocs = docs.filter((d) => d.carro_id === c.id).map((d) => d.arquivo);
       try {
         await dados.excluir(c.id);
+        if (arquivosDocs.length) dados.removerArquivos(B_DOCS, arquivosDocs).catch(() => {});
         if (c.contrato_arquivo) dados.removerArquivos(B_PDF, [c.contrato_arquivo]).catch(() => {});
         dados.removerArquivos(B_FOTOS, fotosDe(c)).catch(() => {});
         await recarregar();
@@ -192,7 +231,7 @@ function desenhar() {
       rotulo(el('td', { textContent: fmtData(c.contrato_inicio) }), 'Início'),
       rotulo(celulaFim(c.contrato_fim), 'Término'),
       rotulo(el('td', {}, contrato), 'Contrato'),
-      el('td', { className: 'acoes-linha' }, editar, excluir)));
+      el('td', { className: 'acoes-linha' }, verDocs, editar, excluir)));
   }
 }
 
@@ -200,7 +239,11 @@ async function recarregar() {
   carros = await dados.listar();
   const primeiras = carros.map((c) => fotosDe(c)[0]).filter(Boolean);
   try { miniaturas = await dados.urlsArquivos(B_FOTOS, primeiras); } catch { miniaturas = new Map(); }
+  // Documentos são opcionais aqui: se a tabela ainda não existe, a frota continua funcionando.
+  try { docs = await dados.listarDocumentos(); docsErro = ''; }
+  catch (e) { docs = []; docsErro = /documentos/i.test(e?.message || '') ? 'A seção de documentos ainda não foi criada no Supabase. Rode o SQL de criação (veja o README) e recarregue a página.' : erroAmigavel(e); }
   desenhar();
+  desenharDocs();
 }
 
 // ---------- Galeria ----------
@@ -357,15 +400,159 @@ $('form-carro').onsubmit = async (ev) => {
   } finally { $('salvar').disabled = false; $('salvar').textContent = 'Salvar'; }
 };
 
+// ---------- Documentos ----------
+const nomeCarro = (c) => (c ? `${c.placa} · ${c.modelo}` : 'Carro removido');
+
+function preencherSelect(sel, opcoes, valor) {
+  sel.replaceChildren(...opcoes.map(([v, t]) => el('option', { value: v, textContent: t })));
+  if (opcoes.some(([v]) => v === valor)) sel.value = valor;
+}
+
+function desenharDocs() {
+  const porCarro = [...carros].sort((x, y) => x.placa.localeCompare(y.placa));
+  preencherSelect($('filtro-carro'), [['', 'Todos os carros'], ...porCarro.map((c) => [c.id, nomeCarro(c)])], $('filtro-carro').value);
+  preencherSelect($('filtro-tipo'), [['', 'Todos os tipos'], ...TIPOS_DOC.map((t) => [t, t])], $('filtro-tipo').value);
+  $('erro-docs').textContent = docsErro;
+  $('novo-doc').disabled = !carros.length || !!docsErro;
+  const fc = $('filtro-carro').value, ft = $('filtro-tipo').value;
+  const mapa = new Map(carros.map((c) => [c.id, c]));
+  const vis = docs.filter((d) => (!fc || d.carro_id === fc) && (!ft || d.tipo === ft))
+    .sort((x, y) => (mapa.get(x.carro_id)?.placa || '').localeCompare(mapa.get(y.carro_id)?.placa || '') || x.tipo.localeCompare(y.tipo));
+  $('resumo-docs').textContent = docsErro ? '' : `${vis.length} de ${docs.length} documento(s)`;
+  const corpo = $('lista-docs');
+  corpo.replaceChildren();
+  if (!vis.length) {
+    const msg = docsErro ? '' : !carros.length ? 'Cadastre um carro na aba Frota para anexar documentos.' : docs.length ? 'Nenhum documento com esse filtro.' : 'Nenhum documento cadastrado ainda.';
+    corpo.append(el('tr', {}, el('td', { colSpan: 5, className: 'vazio', textContent: msg })));
+    return;
+  }
+  for (const d of vis) {
+    const c = mapa.get(d.carro_id);
+    const abrir = el('button', { className: 'link', textContent: 'Abrir', title: d.nome_arquivo });
+    abrir.onclick = () => abrirArquivo(B_DOCS, d.arquivo);
+    const editar = el('button', { className: 'link', textContent: 'Editar' });
+    editar.onclick = () => abrirFormDoc(d);
+    const excluir = el('button', { className: 'perigo', textContent: 'Excluir' });
+    excluir.onclick = async () => {
+      if (!confirm(`Excluir o documento "${d.tipo}" de ${nomeCarro(c)}?`)) return;
+      try {
+        await dados.excluirDocumento(d.id);
+        dados.removerArquivos(B_DOCS, [d.arquivo]).catch(() => {});
+        await recarregar();
+      } catch (e) { alert(erroAmigavel(e)); }
+    };
+    const tipo = el('td', { className: 'doc-nome' }, el('strong', { textContent: d.tipo }));
+    if (d.descricao) tipo.append(el('span', { className: 'doc-desc', textContent: d.descricao }));
+    corpo.append(el('tr', { className: 'linha-doc' },
+      el('td', { className: 'doc-carro' }, el('span', { className: 'placa', textContent: c?.placa || '—' }), el('span', { className: 'doc-desc', textContent: c?.modelo || 'Carro removido' })),
+      tipo,
+      rotulo(celulaFim(d.validade), 'Validade'),
+      rotulo(el('td', {}, abrir), 'Arquivo'),
+      el('td', { className: 'acoes-linha' }, editar, excluir)));
+  }
+}
+$('filtro-carro').onchange = desenharDocs;
+$('filtro-tipo').onchange = desenharDocs;
+
+function irParaDocs(carroId) {
+  mostrarAba('docs');
+  $('filtro-carro').value = carroId;
+  desenharDocs();
+}
+
+let editandoDoc = null;
+function abrirFormDoc(d = null) {
+  editandoDoc = d;
+  $('titulo-doc').textContent = d ? 'Editar documento' : 'Novo documento';
+  const f = $('form-doc');
+  const porCarro = [...carros].sort((x, y) => x.placa.localeCompare(y.placa));
+  preencherSelect($('doc-carro'), porCarro.map((c) => [c.id, nomeCarro(c)]), d?.carro_id || $('filtro-carro').value);
+  preencherSelect($('doc-tipo'), TIPOS_DOC.map((t) => [t, t]), d?.tipo);
+  f.descricao.value = d?.descricao || '';
+  f.validade.value = d?.validade || '';
+  f.arquivo.value = '';
+  $('doc-atual').textContent = d ? `Arquivo atual: ${d.nome_arquivo}. Escolher outro arquivo substitui este.` : '';
+  $('doc-atual').hidden = !d;
+  $('erro-doc').textContent = '';
+  atualizarDicaDescricao();
+  $('dialogo-doc').showModal();
+}
+function atualizarDicaDescricao() {
+  const outro = $('doc-tipo').value === 'Outro';
+  $('doc-desc-dica').textContent = outro ? '(obrigatória)' : '(opcional)';
+}
+$('doc-tipo').onchange = atualizarDicaDescricao;
+$('novo-doc').onclick = () => abrirFormDoc();
+$('doc-cancelar').onclick = () => $('dialogo-doc').close();
+
+// Valida o arquivo e devolve { blob, ext, mime, nome }. PDF vai como está; foto é reduzida e vira JPEG.
+async function prepararDocumento(arq) {
+  const ehPdf = /\.pdf$/i.test(arq.name) || arq.type === 'application/pdf';
+  if (ehPdf) {
+    if (arq.size > MAX_PDF) throw new Error('O PDF é grande demais (máximo 10 MB).');
+    const cab = String.fromCharCode(...new Uint8Array(await arq.slice(0, 5).arrayBuffer()));
+    if (cab !== '%PDF-') throw new Error('Esse arquivo não parece ser um PDF válido.');
+    return { blob: arq, ext: 'pdf', mime: 'application/pdf', nome: arq.name };
+  }
+  if (arq.type.startsWith('image/')) {
+    if (arq.size > MAX_FOTO_ORIGINAL) throw new Error('A foto é grande demais (máximo 30 MB).');
+    return { blob: await reduzirFoto(arq, 2200, 0.85), ext: 'jpg', mime: 'image/jpeg', nome: arq.name };
+  }
+  throw new Error('Use um PDF ou uma foto (JPG, PNG ou WebP).');
+}
+
+$('form-doc').onsubmit = async (ev) => {
+  ev.preventDefault();
+  const f = ev.target;
+  const erro = (m) => { $('erro-doc').textContent = m; };
+  const carro_id = f.carro_id.value;
+  const tipo = f.tipo.value;
+  const descricao = f.descricao.value.trim();
+  const validade = f.validade.value || null;
+  const arq = f.arquivo.files[0] || null;
+  if (!carro_id) return erro('Escolha o carro.');
+  if (tipo === 'Outro' && !descricao) return erro('Descreva o documento (ex.: Apólice do seguro).');
+  if (!editandoDoc && !arq) return erro('Anexe o arquivo do documento (PDF ou foto).');
+  const antigo = editandoDoc?.arquivo || null;
+  let novo = null;
+  $('doc-salvar').disabled = true;
+  try {
+    const campos = { carro_id, tipo, descricao: descricao || null, validade };
+    if (arq) {
+      const p = await prepararDocumento(arq);
+      novo = await dados.enviarArquivo(B_DOCS, p.blob, p.ext, p.mime);
+      Object.assign(campos, { arquivo: novo, nome_arquivo: p.nome });
+    }
+    await dados.salvarDocumento(editandoDoc?.id, campos);
+    if (novo && antigo) dados.removerArquivos(B_DOCS, [antigo]).catch(() => {});
+    $('dialogo-doc').close();
+    await recarregar();
+  } catch (e) {
+    if (novo) dados.removerArquivos(B_DOCS, [novo]).catch(() => {});
+    erro(erroAmigavel(e));
+  } finally { $('doc-salvar').disabled = false; }
+};
+
+// ---------- Abas ----------
+function mostrarAba(aba) {
+  abaAtual = aba;
+  $('tela-painel').hidden = aba !== 'frota';
+  $('tela-docs').hidden = aba !== 'docs';
+  document.querySelectorAll('.aba').forEach((b) => b.classList.toggle('ativa', b.dataset.aba === aba));
+  try { history.replaceState(null, '', aba === 'docs' ? '#documentos' : location.pathname + location.search); } catch { /* sem histórico */ }
+  if (aba === 'docs') desenharDocs();
+}
+document.querySelectorAll('.aba').forEach((b) => { b.onclick = () => mostrarAba(b.dataset.aba); });
+
 // ---------- Login e início ----------
 async function mostrarTela() {
   const logado = await dados.sessao();
   $('tela-login').hidden = logado;
-  $('tela-painel').hidden = !logado;
+  $('abas').hidden = !logado;
   $('sair').hidden = !logado || demo;
-  if (logado) {
-    try { await recarregar(); } catch (e) { $('resumo').textContent = erroAmigavel(e); }
-  }
+  if (!logado) { $('tela-painel').hidden = true; $('tela-docs').hidden = true; return; }
+  mostrarAba(location.hash === '#documentos' ? 'docs' : 'frota');
+  try { await recarregar(); } catch (e) { $('resumo').textContent = erroAmigavel(e); }
 }
 
 $('form-login').onsubmit = async (ev) => {

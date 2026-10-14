@@ -75,13 +75,27 @@ dialog.grande { width: min(900px, calc(100vw - 24px)); }
 .acoes { display: flex; justify-content: flex-end; gap: 8px; }
 @media (max-width: 480px) { .marca img { height: 52px; } }
 
+/* ---------- Abas e documentos ---------- */
+.abas { display: flex; gap: 4px; padding: 0 12px; background: var(--card); border-bottom: 1px solid var(--borda); overflow-x: auto; }
+.aba { background: none; color: var(--suave); border-radius: 0; border-bottom: 3px solid transparent; padding: 12px 16px; font-weight: 600; white-space: nowrap; }
+.aba:hover { filter: none; color: var(--texto); }
+.aba.ativa { color: var(--marca); border-bottom-color: var(--marca); }
+select { display: block; width: 100%; margin-top: 4px; padding: 11px; font: inherit; color: var(--texto); background: var(--campo); border: 1px solid var(--borda); border-radius: 8px; }
+select:focus { outline: 2px solid var(--marca); outline-offset: 1px; border-color: var(--marca); }
+.barra.filtros select { margin: 0; flex: 1 1 0; min-width: 0; }
+.opcional { font-size: .75rem; opacity: .8; }
+.doc-carro .placa { display: block; font-family: ui-monospace, monospace; font-weight: 700; letter-spacing: .04em; }
+.doc-desc { display: block; color: var(--suave); font-size: .85rem; white-space: normal; }
+td.doc-nome { white-space: normal; max-width: 340px; }
+button:disabled { opacity: .6; cursor: not-allowed; }
+
 /* ---------- Responsivo ---------- */
 html { -webkit-text-size-adjust: 100%; }
 img { max-width: 100%; }
 
 /* Toque (celular/tablet): alvos de pelo menos ~44px */
 @media (pointer: coarse) {
-  button, input[type=search], input:not([type=checkbox]) { min-height: 44px; }
+  button, select, input[type=search], input:not([type=checkbox]) { min-height: 44px; }
   button.link, button.perigo { padding: 10px 12px; }
   .foto-item .x { width: 34px; height: 34px; }
 }
@@ -109,6 +123,13 @@ img { max-width: 100%; }
   td[data-rotulo]::before { margin-right: auto; content: attr(data-rotulo); color: var(--suave); font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; text-align: left; }
   td.acoes-linha { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 4px; border-top: 1px solid var(--borda); padding-top: 8px; }
   td.vazio { grid-column: 1 / -1; }
+  td.acoes-linha { flex-wrap: wrap; }
+  .barra.filtros { flex-wrap: wrap; }
+  .barra.filtros select, .barra.filtros button { flex: 1 1 100%; }
+  tbody tr.linha-doc { grid-template-columns: 1fr; }
+  td.doc-carro, td.doc-nome { grid-column: 1; }
+  td.doc-carro { display: flex; align-items: baseline; gap: 10px; }
+  td.doc-nome { max-width: none; padding-bottom: 4px; }
 }
 
 @media (max-width: 600px) {
