@@ -563,12 +563,19 @@ async function enviarVideoDrive(arq, nome, aoProgredir) {
   });
 }
 
-// Apaga o arquivo no Drive. Se ele já não existe (404), conta como apagado.
+// Apaga o arquivo no Drive. Devolve false se o Google não achou o arquivo NESTA conta: ele pode já ter
+// sido apagado, ou ter sido enviado por outra conta Google (o site só enxerga o que a conta conectada criou).
 async function apagarNoDrive(id) {
   await conectarDrive();
   const r = await fetch(`${API_DRIVE}/${encodeURIComponent(id)}`, { method: 'DELETE', headers: authDrive() });
-  if (r.ok || r.status === 404) return;
+  if (r.ok) return true;
+  if (r.status === 404) return false;
   throw await erroDrive(r);
+}
+// true = pode seguir e remover o registro do site; false = o usuário desistiu
+async function apagarVideoDoDrive(id) {
+  if (await apagarNoDrive(id)) return true;
+  return confirm('O Google não encontrou este vídeo na conta conectada.\n\nEle pode já ter sido apagado, ou foi enviado por OUTRA conta Google (nesse caso, cancele, conecte com a conta certa e tente de novo).\n\nRemover só o registro do site, mesmo assim?');
 }
 
 function abrirPlayer(d, c) {
@@ -617,7 +624,7 @@ function desenharLembrete() {
         : `Confirma que o vídeo de ${nomeCarro(c)} já foi apagado de onde estava hospedado?\n\nO link será removido do site.`;
       if (!confirm(msg)) return;
       try {
-        if (noDrive) await apagarNoDrive(d.drive_id);
+        if (noDrive && !(await apagarVideoDoDrive(d.drive_id))) return;
         await dados.excluirDocumento(d.id);
         await recarregar();
       } catch (e) { alert(erroAmigavel(e)); }
@@ -665,7 +672,7 @@ function desenharDocs() {
       const aviso = d.drive_id ? '\n\nO vídeo também será apagado do seu Google Drive.' : '';
       if (!confirm(`Excluir o documento "${d.tipo}" de ${nomeCarro(c)}?${aviso}`)) return;
       try {
-        if (d.drive_id) await apagarNoDrive(d.drive_id);
+        if (d.drive_id && !(await apagarVideoDoDrive(d.drive_id))) return;
         await dados.excluirDocumento(d.id);
         if (d.arquivo) dados.removerArquivos(B_DOCS, [d.arquivo]).catch(() => {});
         await recarregar();

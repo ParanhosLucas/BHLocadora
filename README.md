@@ -27,6 +27,16 @@ Sem configurar o Supabase, os dados ficam só no navegador (localStorage). Serve
 
 Alternativa: GitHub Pages, mas a pasta publicada precisa ser a raiz ou `/docs` (ou use um workflow de Actions apontando para `public`).
 
+### 3. Vídeos no Google Drive (opcional)
+O site pode enviar vídeos do celular direto para o Drive de uma conta Google (aba **Documentos → Vídeo**).
+1. [Google Cloud](https://console.cloud.google.com): crie um projeto e ative a **Google Drive API**.
+2. **Google Auth Platform**: público **Externo**, status **Em teste**, e adicione os e-mails que vão usar em *Usuários de teste*.
+3. *Acesso a dados*: só o escopo `.../auth/drive.file` (arquivos criados pelo próprio site).
+4. *Clientes → Aplicativo da Web*: origem autorizada `https://SEU-SITE.pages.dev`. Copie o **ID do cliente** para `GOOGLE_CLIENT_ID` em `public/config.js`. Nunca use a chave secreta.
+5. Use **sempre a mesma conta Google** para enviar e para apagar: o site só enxerga os vídeos que a conta conectada criou.
+6. No Supabase, rode `supabase/schema.sql` (cria a coluna `drive_id`).
+A conexão com o Google dura cerca de 1 hora. Sem `GOOGLE_CLIENT_ID`, o envio direto fica desligado e vale só o campo de link.
+
 ## Segurança
 - Os dados só são lidos/gravados por usuários logados (regra RLS em `schema.sql`).
 - Placa e contrato **não** aparecem em nenhuma página pública: o site inteiro exige login.
