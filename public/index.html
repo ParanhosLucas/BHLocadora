@@ -4,11 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>BH Locadora</title>
+  <link rel="icon" type="image/png" href="favicon.png">
+  <meta name="theme-color" content="#000000">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <header class="topo">
-    <h1>BH Locadora</h1>
+    <h1 class="marca"><img src="logo.png" alt="BH Locadora — aluguel de veículos e equipamentos"></h1>
     <button id="sair" class="link" hidden>Sair</button>
   </header>
 
@@ -19,6 +21,7 @@
   <main>
     <section id="tela-login" hidden>
       <form id="form-login" class="cartao">
+        <img class="logo-login" src="logo.png" alt="" aria-hidden="true">
         <h2>Entrar</h2>
         <label>E-mail <input name="email" type="email" autocomplete="username" required></label>
         <label>Senha <input name="senha" type="password" autocomplete="current-password" required></label>
