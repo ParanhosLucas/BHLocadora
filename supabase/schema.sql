@@ -165,3 +165,9 @@ where d.carro_id = c.id
   and d.placa is null;
 
 notify pgrst, 'reload schema';
+
+-- ===== Locatário do carro (nome de quem está alugando) =====
+alter table public.carros add column if not exists locatario text
+  check (locatario is null or length(locatario) <= 120);
+
+notify pgrst, 'reload schema';

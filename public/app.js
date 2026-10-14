@@ -262,12 +262,12 @@ const videosDoCarro = (c) => docs.filter((d) => d.carro_id === c.id && d.tipo ==
 
 function desenhar() {
   const termo = $('busca').value.trim().toLowerCase().replace(/[^a-z0-9 ]/g, '');
-  const vis = carros.filter((c) => !termo || `${c.placa} ${c.modelo}`.toLowerCase().includes(termo));
+  const vis = carros.filter((c) => !termo || `${c.placa} ${c.modelo} ${c.locatario || ''}`.toLowerCase().replace(/[^a-z0-9 ]/g, '').includes(termo));
   $('resumo').textContent = `${vis.length} de ${carros.length} carro(s)`;
   const corpo = $('lista');
   corpo.replaceChildren();
   if (!vis.length) {
-    corpo.append(el('tr', {}, el('td', { colSpan: 9, className: 'vazio', textContent: carros.length ? 'Nenhum carro encontrado.' : 'Nenhum carro cadastrado ainda.' })));
+    corpo.append(el('tr', {}, el('td', { colSpan: 10, className: 'vazio', textContent: carros.length ? 'Nenhum carro encontrado.' : 'Nenhum carro cadastrado ainda.' })));
     return;
   }
   for (const c of vis) {
@@ -304,6 +304,7 @@ function desenhar() {
     };
     corpo.append(el('tr', {},
       celulaFoto(c),
+      el('td', { className: `locatario${c.locatario ? '' : ' sem-loc'}`, textContent: c.locatario || '—' }),
       el('td', { className: 'modelo', textContent: c.modelo }),
       el('td', { className: 'placa', textContent: c.placa }),
       rotulo(el('td', { className: 'num', textContent: c.km.toLocaleString('pt-BR') }), 'Km'),
@@ -440,6 +441,7 @@ async function abrirForm(c = null) {
   editando = c;
   $('titulo-form').textContent = c ? 'Editar carro' : 'Novo carro';
   const f = $('form-carro');
+  f.locatario.value = c?.locatario || '';
   f.placa.value = c?.placa || '';
   f.modelo.value = c?.modelo || '';
   f.km.value = c?.km ?? '';
@@ -473,6 +475,7 @@ async function abrirForm(c = null) {
 $('form-carro').onsubmit = async (ev) => {
   ev.preventDefault();
   const f = ev.target;
+  const locatario = f.locatario.value.trim() || null;
   const placa = f.placa.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
   const modelo = f.modelo.value.trim();
   const km = Number(f.km.value);
@@ -497,7 +500,7 @@ $('form-carro').onsubmit = async (ev) => {
     if (!driveConectado()) return erro('Toque em "Conectar ao Google Drive" antes de enviar o vídeo.');
   }
 
-  const campos = { placa, modelo, km, contrato_inicio: inicio, contrato_fim: fim };
+  const campos = { locatario, placa, modelo, km, contrato_inicio: inicio, contrato_fim: fim };
   const pdfAntigo = editando?.contrato_arquivo || null;
   const fotosAntigas = editando ? fotosDe(editando) : [];
   const enviadas = []; // arquivos subidos agora; apagados se o cadastro falhar
