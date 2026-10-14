@@ -75,8 +75,8 @@
   <dialog id="dialogo">
     <form id="form-carro" method="dialog">
       <h2 id="titulo-form">Novo carro</h2>
-      <label>Placa <input name="placa" required maxlength="8" placeholder="ABC1D23" autocapitalize="characters"></label>
-      <label>Modelo <input name="modelo" required maxlength="80" placeholder="Fiat Argo 1.0"></label>
+      <label>Placa <input name="placa" required maxlength="8" autocapitalize="characters"></label>
+      <label>Modelo <input name="modelo" required maxlength="80"></label>
       <label>Km atual <input name="km" type="number" min="0" step="1" required inputmode="numeric"></label>
       <div class="campo-fotos">
         <span class="rotulo">Fotos do carro (até 10)</span>
@@ -114,8 +114,8 @@
     <form id="form-doc" method="dialog">
       <h2 id="titulo-doc">Novo documento</h2>
       <div class="duas">
-        <label>Carro <input name="modelo_doc" maxlength="80" placeholder="Fiat Argo 1.0" autocomplete="off"></label>
-        <label>Placa <input name="placa_doc" maxlength="8" placeholder="ABC1D23" autocapitalize="characters" autocomplete="off"></label>
+        <label>Carro <input name="modelo_doc" maxlength="80" autocomplete="off"></label>
+        <label>Placa <input name="placa_doc" maxlength="8" autocapitalize="characters" autocomplete="off"></label>
       </div>
       <label>Tipo de documento <select name="tipo" id="doc-tipo" required></select></label>
       <label id="rotulo-arquivo">Arquivo (PDF ou foto, até 10 MB) <input name="arquivo" type="file" accept="application/pdf,.pdf,image/*"></label>
