@@ -24,7 +24,7 @@ button.perigo { background: none; color: var(--erro); padding: 4px 8px; font-wei
 a { color: var(--marca); }
 .erro { color: var(--erro); min-height: 1.2em; margin: 8px 0; font-size: .9rem; }
 .barra { display: flex; gap: 8px; }
-.barra input { margin: 0; }
+.barra input { margin: 0; flex: 1; min-width: 0; }
 .barra button { white-space: nowrap; }
 .resumo { color: var(--suave); font-size: .9rem; }
 .tabela-wrap { overflow-x: auto; background: var(--card); border: 1px solid var(--borda); border-radius: 12px; }
@@ -42,6 +42,7 @@ dialog::backdrop { background: rgba(0, 0, 0, .7); }
 dialog h2, .cartao h2 { margin: 0 0 4px; font-size: 1.1rem; }
 .cartao h2 { text-align: center; }
 .duas { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.duas label { min-width: 0; }
 .duas input { min-width: 0; color-scheme: dark; }
 .etiqueta { display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 999px; font-size: .75rem; font-weight: 600; background: var(--marca); color: var(--sobre-marca); }
 .etiqueta.vencido { background: var(--erro); }
@@ -70,3 +71,56 @@ dialog.grande { width: min(900px, calc(100vw - 24px)); }
 .gal-nav button { font-size: 1.3rem; padding: 4px 18px; }
 .acoes { display: flex; justify-content: flex-end; gap: 8px; }
 @media (max-width: 480px) { .marca img { height: 52px; } }
+
+/* ---------- Responsivo ---------- */
+html { -webkit-text-size-adjust: 100%; }
+img { max-width: 100%; }
+
+/* Toque (celular/tablet): alvos de pelo menos ~44px */
+@media (pointer: coarse) {
+  button, input[type=search], input:not([type=checkbox]) { min-height: 44px; }
+  button.link, button.perigo { padding: 10px 12px; }
+  .foto-item .x { width: 34px; height: 34px; }
+}
+
+/* Tablet e celular: cada carro vira um cartão */
+@media (max-width: 860px) {
+  main { padding: 12px; }
+  .tabela-wrap { background: none; border: 0; overflow: visible; }
+  table, tbody { display: block; }
+  thead { display: none; }
+  tbody tr { display: grid; grid-template-columns: 84px 1fr; column-gap: 12px; row-gap: 2px;
+    background: var(--card); border: 1px solid var(--borda); border-radius: 12px; padding: 12px; margin-bottom: 10px; }
+  tbody tr:hover { background: var(--card); }
+  tbody td { display: block; padding: 0; border: 0; white-space: normal; text-align: left; }
+  td.foto-celula { grid-row: 1 / span 2; width: auto; align-self: center; }
+  .mini, .sem-foto { width: 84px; }
+  .mini { height: 64px; }
+  td.placa { grid-column: 2; align-self: end; font-size: 1.1rem; }
+  td.modelo { grid-column: 2; align-self: start; color: var(--suave); }
+  td[data-rotulo] { grid-column: 1 / -1; display: flex; justify-content: flex-end; align-items: center; gap: 10px;
+    padding: 8px 0; border-top: 1px solid var(--borda); text-align: right; }
+  td[data-rotulo] .etiqueta { margin-left: 0; }
+  td[data-rotulo] button.link { padding: 0; min-height: 28px; }
+  td[data-rotulo]:first-of-type { margin-top: 8px; }
+  td[data-rotulo]::before { margin-right: auto; content: attr(data-rotulo); color: var(--suave); font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; text-align: left; }
+  td.acoes-linha { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 4px; border-top: 1px solid var(--borda); padding-top: 8px; }
+  td.vazio { grid-column: 1 / -1; }
+}
+
+@media (max-width: 600px) {
+  .marca img { height: 48px; }
+  .topo { padding: 6px 12px; }
+  .cartao { margin: 12px auto; padding: 18px 16px; }
+  .barra button { padding-inline: 14px; }
+  dialog { width: calc(100vw - 16px); max-height: calc(100vh - 16px); max-height: calc(100dvh - 16px); padding: 16px; }
+  dialog.grande { width: calc(100vw - 16px); }
+  #gal-img { max-height: calc(100vh - 170px); max-height: calc(100dvh - 170px); }
+  .acoes { position: sticky; bottom: -16px; background: var(--card); padding: 12px 0 4px; margin-bottom: -4px; }
+}
+
+@media (max-width: 360px) {
+  .duas { grid-template-columns: 1fr; }
+  .barra { flex-wrap: wrap; }
+  .barra button { flex: 1 1 100%; }
+}

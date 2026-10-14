@@ -96,6 +96,8 @@ const diasAte = (d) => {
   const hoje = new Date();
   return Math.round((new Date(y, m - 1, dia) - new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate())) / 86400000);
 };
+// Em telas estreitas a tabela vira cartões; o rótulo aparece antes do valor (ver style.css).
+const rotulo = (td, texto) => { td.setAttribute('data-rotulo', texto); return td; };
 function celulaFim(d) {
   const td = el('td', { textContent: fmtData(d) });
   if (!d) return td;
@@ -182,11 +184,11 @@ function desenhar() {
     corpo.append(el('tr', {},
       celulaFoto(c),
       el('td', { className: 'placa', textContent: c.placa }),
-      el('td', { textContent: c.modelo }),
-      el('td', { className: 'num', textContent: c.km.toLocaleString('pt-BR') }),
-      el('td', { textContent: fmtData(c.contrato_inicio) }),
-      celulaFim(c.contrato_fim),
-      el('td', {}, contrato),
+      el('td', { className: 'modelo', textContent: c.modelo }),
+      rotulo(el('td', { className: 'num', textContent: c.km.toLocaleString('pt-BR') }), 'Km'),
+      rotulo(el('td', { textContent: fmtData(c.contrato_inicio) }), 'Início'),
+      rotulo(celulaFim(c.contrato_fim), 'Término'),
+      rotulo(el('td', {}, contrato), 'Contrato'),
       el('td', { className: 'acoes-linha' }, editar, excluir)));
   }
 }
