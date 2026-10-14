@@ -169,11 +169,7 @@ img { max-width: 100%; }
 progress { width: 100%; height: 10px; accent-color: var(--marca); }
 
 /* ---------- Documentos: locatário, fotos ---------- */
-td.doc-locatario { font-weight: 700; }
-td.doc-locatario.sem-loc { color: var(--suave); font-weight: 400; }
 .barra.filtros input { margin: 0; flex: 1.4 1 0; min-width: 0; }
 @media (max-width: 860px) {
   .barra.filtros input { flex: 1 1 100%; }
-  td.doc-locatario { grid-column: 1; font-size: 1.1rem; padding-bottom: 2px; }
-  td.doc-locatario.sem-loc { display: none; }
 }

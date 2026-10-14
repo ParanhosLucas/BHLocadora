@@ -54,7 +54,7 @@
     <section id="tela-docs" hidden>
       <div id="lembrete-videos" class="lembrete" hidden></div>
       <div class="barra filtros">
-        <input id="busca-doc" type="search" placeholder="Buscar locatário, carro ou placa" aria-label="Buscar documentos">
+        <input id="busca-doc" type="search" placeholder="Buscar carro ou placa" aria-label="Buscar documentos">
         <select id="filtro-carro" aria-label="Filtrar por carro"></select>
         <select id="filtro-tipo" aria-label="Filtrar por tipo de documento"></select>
         <button id="novo-doc">+ Novo documento</button>
@@ -64,7 +64,7 @@
       <div class="tabela-wrap">
         <table>
           <thead>
-            <tr><th>Locatário</th><th>Carro</th><th>Documento</th><th>Validade</th><th>Arquivo / vídeo</th><th></th></tr>
+            <tr><th>Carro</th><th>Documento</th><th>Validade</th><th>Arquivo / vídeo</th><th></th></tr>
           </thead>
           <tbody id="lista-docs"></tbody>
         </table>
@@ -113,8 +113,6 @@
   <dialog id="dialogo-doc">
     <form id="form-doc" method="dialog">
       <h2 id="titulo-doc">Novo documento</h2>
-      <label>Locatário <span class="opcional">(opcional)</span> <input name="locatario" maxlength="120" list="lista-locatarios" autocomplete="off" placeholder="Nome de quem alugou o carro"></label>
-      <datalist id="lista-locatarios"></datalist>
       <label>Carro <select name="carro_id" id="doc-carro" required></select></label>
       <label>Tipo de documento <select name="tipo" id="doc-tipo" required></select></label>
       <label>Validade <span class="opcional">(opcional)</span> <input name="validade" type="date"></label>

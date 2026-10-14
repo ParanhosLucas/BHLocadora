@@ -689,7 +689,6 @@ function desenharDocs() {
   const porCarro = [...carros].sort(porModelo);
   preencherSelect($('filtro-carro'), [['', 'Todos os carros'], ...porCarro.map((c) => [c.id, nomeCarro(c)])], $('filtro-carro').value);
   preencherSelect($('filtro-tipo'), [['', 'Todos os tipos'], ...tiposDoFiltro().map((t) => [t, t])], $('filtro-tipo').value);
-  $('lista-locatarios').replaceChildren(...[...new Set(docs.map((d) => d.locatario).filter(Boolean))].sort().map((n) => el('option', { value: n })));
   $('erro-docs').textContent = docsErro;
   $('novo-doc').disabled = !carros.length || !!docsErro;
   const fc = $('filtro-carro').value, ft = $('filtro-tipo').value;
@@ -698,19 +697,17 @@ function desenharDocs() {
   const vis = docs.filter((d) => {
     const c = mapa.get(d.carro_id);
     return (!fc || d.carro_id === fc) && (!ft || d.tipo === ft)
-      && (!termo || `${d.locatario || ''} ${c?.modelo || ''} ${c?.placa || ''} ${d.tipo}`.toLowerCase().includes(termo));
+      && (!termo || `${c?.modelo || ''} ${c?.placa || ''} ${d.tipo}`.toLowerCase().includes(termo));
   }).sort((x, y) => {
-    if (!!x.locatario !== !!y.locatario) return x.locatario ? -1 : 1; // com locatário primeiro
-    const r = x.locatario && y.locatario ? x.locatario.localeCompare(y.locatario) : 0;
     const cx = mapa.get(x.carro_id), cy = mapa.get(y.carro_id);
-    return r || (cx && cy ? porModelo(cx, cy) : 0) || x.tipo.localeCompare(y.tipo);
+    return (cx && cy ? porModelo(cx, cy) : 0) || x.tipo.localeCompare(y.tipo);
   });
   $('resumo-docs').textContent = docsErro ? '' : `${vis.length} de ${docs.length} documento(s)`;
   const corpo = $('lista-docs');
   corpo.replaceChildren();
   if (!vis.length) {
     const msg = docsErro ? '' : !carros.length ? 'Cadastre um carro na aba Frota para anexar documentos.' : docs.length ? 'Nenhum documento com esse filtro.' : 'Nenhum documento cadastrado ainda.';
-    corpo.append(el('tr', {}, el('td', { colSpan: 6, className: 'vazio', textContent: msg })));
+    corpo.append(el('tr', {}, el('td', { colSpan: 5, className: 'vazio', textContent: msg })));
     return;
   }
   for (const d of vis) {
@@ -718,7 +715,7 @@ function desenharDocs() {
     let abrir;
     if (d.tipo === TIPO_FOTOS) {
       abrir = el('button', { className: 'link', textContent: `Ver fotos (${fotosDoc(d).length})` });
-      abrir.onclick = () => abrirGaleriaDe(`${d.locatario ? `${d.locatario} · ` : ''}${nomeCarro(c)}`, fotosDoc(d), B_DOCS);
+      abrir.onclick = () => abrirGaleriaDe(nomeCarro(c), fotosDoc(d), B_DOCS);
     } else if (d.link) abrir = el('a', { href: d.link, target: '_blank', rel: 'noopener noreferrer', textContent: 'Assistir' });
     else {
       abrir = el('button', { className: 'link', textContent: 'Abrir', title: d.nome_arquivo || '' });
@@ -740,7 +737,6 @@ function desenharDocs() {
     const tipo = el('td', { className: 'doc-nome' }, el('strong', { textContent: d.tipo }));
     if (d.descricao) tipo.append(el('span', { className: 'doc-desc', textContent: d.descricao })); // documentos antigos
     corpo.append(el('tr', { className: 'linha-doc' },
-      el('td', { className: `doc-locatario${d.locatario ? '' : ' sem-loc'}`, textContent: d.locatario || '—' }),
       el('td', { className: 'doc-carro' }, el('span', { className: 'doc-modelo', textContent: c?.modelo || 'Carro removido' }), el('span', { className: 'placa', textContent: c?.placa || '' })),
       tipo,
       rotulo(celulaFim(d.validade), 'Validade'),
@@ -806,7 +802,6 @@ async function abrirFormDoc(d = null) {
   $('titulo-doc').textContent = d ? 'Editar documento' : 'Novo documento';
   const f = $('form-doc');
   const porCarro = [...carros].sort(porModelo);
-  f.locatario.value = d?.locatario || '';
   preencherSelect($('doc-carro'), porCarro.map((c) => [c.id, nomeCarro(c)]), d?.carro_id || $('filtro-carro').value);
   // documento antigo com um tipo que saiu da lista (ex.: "Outro") continua editável sem perder o tipo
   const tipos = d && !TIPOS_DOC.includes(d.tipo) ? [...TIPOS_DOC, d.tipo] : TIPOS_DOC;
@@ -866,7 +861,6 @@ $('form-doc').onsubmit = async (ev) => {
   const erro = (m) => { $('erro-doc').textContent = m; };
   const carro_id = f.carro_id.value;
   const tipo = f.tipo.value;
-  const locatario = f.locatario.value.trim() || null;
   const validade = f.validade.value || null;
   const ehVideo = tipo === TIPO_VIDEO;
   const ehFotos = tipo === TIPO_FOTOS;
@@ -891,8 +885,8 @@ $('form-doc').onsubmit = async (ev) => {
   let driveNovo = null;
   $('doc-salvar').disabled = true;
   try {
-    // "descricao" não é mais preenchida aqui: fica de fora para não apagar a de documentos antigos
-    const campos = { carro_id, tipo, locatario, validade, link: ehVideo ? link : null, drive_id: null, fotos: [] };
+    // "descricao" e "locatario" não são mais preenchidos aqui: ficam de fora para não apagar os de documentos antigos
+    const campos = { carro_id, tipo, validade, link: ehVideo ? link : null, drive_id: null, fotos: [] };
     if (ehVideo && video) {
       const carro = carros.find((c) => c.id === carro_id);
       const barra = $('video-progresso');
