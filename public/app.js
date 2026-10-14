@@ -6,12 +6,12 @@ const B_PDF = 'contratos';
 const B_FOTOS = 'fotos';
 const B_DOCS = 'documentos';
 const TIPOS_DOC = ['CRLV (documento do carro)', 'Seguro', 'IPVA', 'Licenciamento', 'Contrato de locação',
-  'Vistoria', 'Nota fiscal', 'Manutenção', 'Multa', 'Vídeo (link)', 'Outro'];
+  'Vistoria', 'Nota fiscal', 'Manutenção', 'Multa', 'Vídeo', 'Outro'];
 const GOOGLE_ID = cfg.GOOGLE_CLIENT_ID || '';
 const usaDrive = !!GOOGLE_ID; // sem o ID do Google, o envio direto fica desligado
-const TIPO_VIDEO = 'Vídeo (link)'; // guarda só o link (Drive, YouTube...); o arquivo fica fora do Supabase
+const TIPO_VIDEO = 'Vídeo'; // guarda só o link/ID (Drive, YouTube...); o arquivo fica fora do Supabase
 const MAX_PDF = 10 * 1024 * 1024; // 10 MB, igual ao limite do bucket
-const MAX_FOTOS = 8;              // fotos por carro
+const MAX_FOTOS = 10;             // fotos por carro
 const MAX_FOTO_ORIGINAL = 30 * 1024 * 1024; // limite do arquivo escolhido, antes de reduzir
 const LADO_MAX = 1280;            // px do maior lado da foto depois de reduzir (~100 KB)
 const LADO_MINI = 320;            // miniatura da lista (~15 KB): a lista não baixa a foto inteira
@@ -260,10 +260,13 @@ function desenhar() {
     verDocs.onclick = () => irParaDocs(c.id);
     const excluir = el('button', { className: 'perigo', textContent: 'Excluir' });
     excluir.onclick = async () => {
-      const aviso = qtdDocs ? `\n\nOs ${qtdDocs} documento(s) deste carro também serão apagados.` : '';
+      const videosDrive = docs.filter((d) => d.carro_id === c.id && d.drive_id);
+      const aviso = (qtdDocs ? `\n\nOs ${qtdDocs} documento(s) deste carro também serão apagados.` : '')
+        + (videosDrive.length ? `\n\n${videosDrive.length} vídeo(s) também serão apagados do seu Google Drive.` : '');
       if (!confirm(`Excluir ${c.modelo} (${c.placa})?${aviso}`)) return;
       const arquivosDocs = docs.filter((d) => d.carro_id === c.id).map((d) => d.arquivo).filter(Boolean);
       try {
+        for (const v of videosDrive) if (!(await apagarVideoDoDrive(v.drive_id))) return; // 1º: a janela do Google abre direto do clique
         await dados.excluir(c.id);
         if (arquivosDocs.length) dados.removerArquivos(B_DOCS, arquivosDocs).catch(() => {});
         if (c.contrato_arquivo) dados.removerArquivos(B_PDF, [c.contrato_arquivo]).catch(() => {});
@@ -288,7 +291,10 @@ async function recarregar() {
   const primeiras = carros.map((c) => fotosDe(c)[0]).filter(Boolean);
   try { miniaturas = await urlsMiniaturas(primeiras); } catch { miniaturas = new Map(); }
   // Documentos são opcionais aqui: se a tabela ainda não existe, a frota continua funcionando.
-  try { docs = await dados.listarDocumentos(); docsErro = ''; }
+  try {
+    docs = await dados.listarDocumentos(); docsErro = '';
+    docs.forEach((d) => { if (d.tipo === 'Vídeo (link)') d.tipo = TIPO_VIDEO; }); // nome antigo do tipo
+  }
   catch (e) { docs = []; docsErro = /documentos/i.test(e?.message || '') ? 'A seção de documentos ainda não foi criada no Supabase. Rode o SQL de criação (veja o README) e recarregue a página.' : erroAmigavel(e); }
   desenhar();
   desenharDocs();
@@ -395,6 +401,13 @@ async function abrirForm(c = null) {
   fotosNovas = [];
   urlsAtuais = new Map();
   $('erro-form').textContent = '';
+  f.video.value = '';
+  $('carro-video-progresso').hidden = true;
+  $('bloco-video-carro').hidden = !usaDrive;
+  const nVideos = c ? docs.filter((d) => d.carro_id === c.id && d.tipo === TIPO_VIDEO).length : 0;
+  $('videos-existentes').textContent = nVideos ? `Este carro já tem ${nVideos} vídeo(s) (veja na aba Documentos). Enviar outro adiciona mais um.` : '';
+  $('videos-existentes').hidden = !nVideos;
+  atualizarEstadoGoogle();
   desenharFotosForm();
   $('dialogo').showModal();
   f.placa.focus();
@@ -424,12 +437,20 @@ $('form-carro').onsubmit = async (ev) => {
     if (cab !== '%PDF-') return erro('Esse arquivo não parece ser um PDF válido.');
   }
   if (inicio && fim && fim < inicio) return erro('O término do contrato não pode ser antes do início.');
+  const video = usaDrive ? f.video.files[0] || null : null;
+  if (video) {
+    if (!video.type.startsWith('video/')) return erro('O arquivo escolhido não é um vídeo.');
+    if (!driveConectado()) return erro('Toque em "Conectar ao Google Drive" antes de enviar o vídeo.');
+  }
 
   const campos = { placa, modelo, km, contrato_inicio: inicio, contrato_fim: fim };
   const pdfAntigo = editando?.contrato_arquivo || null;
   const fotosAntigas = editando ? fotosDe(editando) : [];
   const enviadas = []; // arquivos subidos agora; apagados se o cadastro falhar
   let pdfNovo = null;
+  let driveNovo = null;
+  let carroSalvo = false;
+  const idCarro = editando?.id || crypto.randomUUID(); // o id nasce aqui para o vídeo já apontar para o carro
   $('salvar').disabled = true;
   try {
     if (pdf) {
@@ -447,16 +468,41 @@ $('form-carro').onsubmit = async (ev) => {
       await dados.enviarArquivo(B_FOTOS, mini, 'jpg', 'image/jpeg', caminhoMini(caminho)).catch(() => {});
     }
     campos.fotos = [...fotosAtuais, ...enviadas];
-    await dados.salvar(editando?.id, campos);
+    if (video) {
+      const barra = $('carro-video-progresso');
+      barra.hidden = false; barra.value = 0;
+      driveNovo = await enviarVideoDrive(video, `${placa} - Vídeo - ${video.name}`, (pct) => {
+        barra.value = pct;
+        $('salvar').textContent = pct < 100 ? `Enviando vídeo… ${pct}%` : 'Finalizando…';
+      });
+    }
+    await dados.salvar(editando?.id, editando ? campos : { id: idCarro, ...campos });
+    carroSalvo = true;
+    if (driveNovo) {
+      try {
+        await dados.salvarDocumento(null, { carro_id: idCarro, tipo: TIPO_VIDEO, descricao: null, validade: null, arquivo: null, nome_arquivo: null,
+          link: `https://drive.google.com/file/d/${driveNovo}/view`, drive_id: driveNovo });
+      } catch (e) {
+        apagarNoDrive(driveNovo).catch(() => {}); // não deixa o vídeo solto no Drive
+        throw new Error(`O carro foi salvo, mas o vídeo não foi registrado (${erroAmigavel(e)}). Envie o vídeo de novo pela aba Documentos.`);
+      }
+    }
     if (pdfAntigo && (pdf || removerPdf)) dados.removerArquivos(B_PDF, [pdfAntigo]).catch(() => {});
     dados.removerArquivos(B_FOTOS, comMiniaturas(fotosAntigas.filter((p) => !fotosAtuais.includes(p)))).catch(() => {});
     $('dialogo').close();
     await recarregar();
   } catch (e) {
-    if (pdfNovo) dados.removerArquivos(B_PDF, [pdfNovo]).catch(() => {});
-    dados.removerArquivos(B_FOTOS, comMiniaturas(enviadas)).catch(() => {});
-    erro(erroAmigavel(e));
-  } finally { $('salvar').disabled = false; $('salvar').textContent = 'Salvar'; }
+    if (!carroSalvo) { // o carro NÃO foi salvo: desfaz os envios. Se foi, os arquivos já pertencem a ele.
+      if (pdfNovo) dados.removerArquivos(B_PDF, [pdfNovo]).catch(() => {});
+      dados.removerArquivos(B_FOTOS, comMiniaturas(enviadas)).catch(() => {});
+      if (driveNovo && driveConectado()) apagarNoDrive(driveNovo).catch(() => {});
+    }
+    if (carroSalvo) { // o carro existe: fecha o formulário (salvar de novo daria "placa duplicada") e avisa
+      $('dialogo').close();
+      await recarregar().catch(() => {});
+      alert(erroAmigavel(e));
+    } else erro(erroAmigavel(e));
+  } finally { $('salvar').disabled = false; $('salvar').textContent = 'Salvar'; $('carro-video-progresso').hidden = true; }
 };
 
 // ---------- Google Drive (opcional) ----------
@@ -497,16 +543,19 @@ function conectarDrive() {
 
 function atualizarEstadoGoogle() {
   const ok = driveConectado();
-  const estado = $('google-estado');
-  if (!estado) return;
-  estado.textContent = ok ? 'Google Drive: conectado ✓' : 'Google Drive: não conectado. A conexão vale por cerca de 1 hora.';
-  estado.classList.toggle('ok', ok);
-  $('google-conectar').hidden = ok;
+  document.querySelectorAll('.google-estado').forEach((e) => {
+    e.textContent = ok ? 'Google Drive: conectado ✓' : 'Google Drive: não conectado. A conexão vale por cerca de 1 hora.';
+    e.classList.toggle('ok', ok);
+  });
+  document.querySelectorAll('.google-conectar').forEach((b) => { b.hidden = ok; });
 }
-$('google-conectar').onclick = async () => {
-  $('erro-doc').textContent = '';
-  try { await conectarDrive(); } catch (e) { $('erro-doc').textContent = erroAmigavel(e); }
-};
+document.querySelectorAll('.google-conectar').forEach((b) => {
+  b.onclick = async () => {
+    const msg = b.closest('form').querySelector('.erro');
+    msg.textContent = '';
+    try { await conectarDrive(); } catch (e) { msg.textContent = erroAmigavel(e); }
+  };
+});
 
 async function erroDrive(r) {
   if (r.status === 401) { tokenDrive = null; atualizarEstadoGoogle(); return new Error('A conexão com o Google expirou. Toque em "Conectar ao Google Drive" e tente de novo.'); }

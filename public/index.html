@@ -78,7 +78,7 @@
       <label>Modelo <input name="modelo" required maxlength="80" placeholder="Fiat Argo 1.0"></label>
       <label>Km atual <input name="km" type="number" min="0" step="1" required inputmode="numeric"></label>
       <div class="campo-fotos">
-        <span class="rotulo">Fotos do carro (até 8)</span>
+        <span class="rotulo">Fotos do carro (até 10)</span>
         <div id="fotos-grade" class="fotos-grade"></div>
         <div class="fotos-barra">
           <button type="button" class="sec" id="fotos-botao">+ Adicionar fotos</button>
@@ -93,6 +93,14 @@
       <label>Contrato em PDF (até 10 MB) <input name="contrato_pdf" type="file" accept="application/pdf,.pdf"></label>
       <p id="pdf-atual" class="pdf-atual" hidden></p>
       <label id="rotulo-remover" class="marcar" hidden><input name="remover_pdf" type="checkbox"> Remover o contrato atual</label>
+      <div id="bloco-video-carro" hidden>
+        <span class="rotulo">Vídeo do carro <span class="opcional">(opcional)</span></span>
+        <p class="google-estado"></p>
+        <button type="button" class="sec google-conectar">Conectar ao Google Drive</button>
+        <label>Escolher vídeo do celular (vai para o seu Google Drive) <input name="video" type="file" accept="video/*"></label>
+        <progress id="carro-video-progresso" max="100" value="0" hidden></progress>
+        <p id="videos-existentes" class="pdf-atual" hidden></p>
+      </div>
       <p class="erro" id="erro-form" role="alert"></p>
       <div class="acoes">
         <button type="button" class="sec" id="cancelar">Cancelar</button>
@@ -110,8 +118,8 @@
       <label>Validade <span class="opcional">(opcional)</span> <input name="validade" type="date"></label>
       <label id="rotulo-arquivo">Arquivo (PDF ou foto, até 10 MB) <input name="arquivo" type="file" accept="application/pdf,.pdf,image/*"></label>
       <div id="bloco-video" hidden>
-        <p class="google-estado" id="google-estado"></p>
-        <button type="button" class="sec" id="google-conectar">Conectar ao Google Drive</button>
+        <p class="google-estado"></p>
+        <button type="button" class="sec google-conectar">Conectar ao Google Drive</button>
         <label>Vídeo do celular (vai para o seu Google Drive) <input name="video" type="file" accept="video/*"></label>
         <progress id="video-progresso" max="100" value="0" hidden></progress>
         <p class="opcional" id="video-ou">Ou, se o vídeo já está hospedado, cole o link abaixo.</p>
