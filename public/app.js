@@ -707,7 +707,7 @@ function desenharDocs() {
   corpo.replaceChildren();
   if (!vis.length) {
     const msg = docsErro ? '' : !carros.length ? 'Cadastre um carro na aba Frota para anexar documentos.' : docs.length ? 'Nenhum documento com esse filtro.' : 'Nenhum documento cadastrado ainda.';
-    corpo.append(el('tr', {}, el('td', { colSpan: 5, className: 'vazio', textContent: msg })));
+    corpo.append(el('tr', {}, el('td', { colSpan: 6, className: 'vazio', textContent: msg })));
     return;
   }
   for (const d of vis) {
@@ -737,7 +737,8 @@ function desenharDocs() {
     const tipo = el('td', { className: 'doc-nome' }, el('strong', { textContent: d.tipo }));
     if (d.descricao) tipo.append(el('span', { className: 'doc-desc', textContent: d.descricao })); // documentos antigos
     corpo.append(el('tr', { className: 'linha-doc' },
-      el('td', { className: 'doc-carro' }, el('span', { className: 'doc-modelo', textContent: c?.modelo || 'Carro removido' }), el('span', { className: 'placa', textContent: c?.placa || '' })),
+      el('td', { className: 'doc-carro', textContent: c?.modelo || 'Carro removido' }),
+      el('td', { className: 'doc-placa', textContent: c?.placa || '—' }),
       tipo,
       rotulo(celulaFim(d.validade), 'Validade'),
       rotulo(el('td', {}, abrir), d.tipo === TIPO_VIDEO ? 'Vídeo' : d.tipo === TIPO_FOTOS ? 'Fotos' : 'Arquivo'),

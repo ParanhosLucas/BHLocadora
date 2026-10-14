@@ -85,8 +85,8 @@ select { display: block; width: 100%; margin-top: 4px; padding: 11px; font: inhe
 select:focus { outline: 2px solid var(--marca); outline-offset: 1px; border-color: var(--marca); }
 .barra.filtros select { margin: 0; flex: 1 1 0; min-width: 0; }
 .opcional { font-size: .75rem; opacity: .8; }
-.doc-carro .doc-modelo { display: block; font-weight: 700; }
-.doc-carro .placa { display: block; font-family: ui-monospace, monospace; letter-spacing: .04em; color: var(--suave); font-size: .85rem; }
+.doc-carro { font-weight: 700; }
+td.doc-placa { font-family: ui-monospace, monospace; letter-spacing: .04em; color: var(--suave); }
 .doc-desc { display: block; color: var(--suave); font-size: .85rem; white-space: normal; }
 td.doc-nome { white-space: normal; max-width: 340px; }
 button:disabled { opacity: .6; cursor: not-allowed; }
@@ -134,9 +134,10 @@ img { max-width: 100%; }
   td.acoes-linha { flex-wrap: wrap; }
   .barra.filtros { flex-wrap: wrap; }
   .barra.filtros select, .barra.filtros button { flex: 1 1 100%; }
-  tbody tr.linha-doc { grid-template-columns: 1fr; }
-  td.doc-carro, td.doc-nome { grid-column: 1; }
-  td.doc-carro { display: flex; align-items: baseline; gap: 10px; font-size: 1.05rem; }
+  tbody tr.linha-doc { grid-template-columns: auto 1fr; column-gap: 10px; }
+  td.doc-carro { grid-column: 1; font-size: 1.05rem; }
+  td.doc-placa { grid-column: 2; align-self: baseline; font-size: .9rem; }
+  td.doc-nome { grid-column: 1 / -1; }
   td.doc-nome { max-width: none; padding-bottom: 4px; }
 }
 
