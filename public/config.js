@@ -8,5 +8,5 @@ window.CONFIG = {
   // Opcional: envio de vídeos direto para o seu Google Drive. Cole aqui o "ID do cliente" OAuth
   // (termina em .apps.googleusercontent.com). É público por design. NUNCA cole a "chave secreta".
   // Em branco, o botão de envio some e vale só o campo de link.
-  GOOGLE_CLIENT_ID: '',
+  GOOGLE_CLIENT_ID: '995802594461-s8b7k0q7ogbqrimueh0k4fhbjvp6njnm.apps.googleusercontent.com',
 };
