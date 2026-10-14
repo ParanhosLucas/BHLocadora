@@ -113,12 +113,9 @@
   <dialog id="dialogo-doc">
     <form id="form-doc" method="dialog">
       <h2 id="titulo-doc">Novo documento</h2>
-      <label>Carro <select name="carro_id" id="doc-carro"></select></label>
-      <div id="bloco-carro-novo" hidden>
-        <div class="duas">
-          <label>Modelo do carro <input name="modelo_doc" maxlength="80" placeholder="Fiat Argo 1.0"></label>
-          <label>Placa <input name="placa_doc" maxlength="8" placeholder="ABC1D23" autocapitalize="characters"></label>
-        </div>
+      <div class="duas">
+        <label>Carro <input name="modelo_doc" maxlength="80" placeholder="Fiat Argo 1.0" autocomplete="off"></label>
+        <label>Placa <input name="placa_doc" maxlength="8" placeholder="ABC1D23" autocapitalize="characters" autocomplete="off"></label>
       </div>
       <label>Tipo de documento <select name="tipo" id="doc-tipo" required></select></label>
       <label id="rotulo-arquivo">Arquivo (PDF ou foto, até 10 MB) <input name="arquivo" type="file" accept="application/pdf,.pdf,image/*"></label>

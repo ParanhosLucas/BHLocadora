@@ -842,13 +842,12 @@ async function abrirFormDoc(d = null) {
   editandoDoc = d;
   $('titulo-doc').textContent = d ? 'Editar documento' : 'Novo documento';
   const f = $('form-doc');
-  const porCarro = [...carros].sort(porModelo);
+  // Modelo e placa são sempre digitados. Ao editar, ou ao abrir com um carro filtrado, já vêm preenchidos.
   const filtro = $('filtro-carro').value;
-  const semCad = filtro.startsWith('placa:') ? docs.find((x) => !x.carro_id && x.placa === filtro.slice(6)) : null;
-  const inicial = d ? d.carro_id || '__novo' : semCad ? '__novo' : filtro || porCarro[0]?.id || '__novo';
-  preencherSelect($('doc-carro'), [...porCarro.map((c) => [c.id, nomeCarro(c)]), ['__novo', 'Outro carro (não cadastrado)']], inicial);
-  f.modelo_doc.value = d && !d.carro_id ? d.modelo || '' : semCad?.modelo || '';
-  f.placa_doc.value = d && !d.carro_id ? d.placa || '' : semCad?.placa || '';
+  const origem = d ? carros.find((c) => c.id === d.carro_id) || d
+    : carros.find((c) => c.id === filtro) || (filtro.startsWith('placa:') ? docs.find((x) => !x.carro_id && x.placa === filtro.slice(6)) : null);
+  f.modelo_doc.value = origem?.modelo || '';
+  f.placa_doc.value = origem?.placa || '';
   // documento antigo com um tipo que saiu da lista (ex.: "Outro") continua editável sem perder o tipo
   const tipos = d && !TIPOS_DOC.includes(d.tipo) ? [...TIPOS_DOC, d.tipo] : TIPOS_DOC;
   preencherSelect($('doc-tipo'), tipos.map((t) => [t, t]), d?.tipo);
@@ -873,7 +872,6 @@ function atualizarFormDoc() {
   const tipo = $('doc-tipo').value;
   const video = tipo === TIPO_VIDEO;
   const fotos = tipo === TIPO_FOTOS;
-  $('bloco-carro-novo').hidden = $('doc-carro').value !== '__novo';
   $('rotulo-arquivo').hidden = video || fotos;
   $('bloco-fotos-doc').hidden = !fotos;
   $('bloco-video').hidden = !(video && usaDrive);
@@ -882,7 +880,6 @@ function atualizarFormDoc() {
   $('doc-atual').hidden = video || fotos || !$('doc-atual').textContent;
 }
 $('doc-tipo').onchange = atualizarFormDoc;
-$('doc-carro').onchange = atualizarFormDoc;
 $('novo-doc').onclick = () => abrirFormDoc();
 $('doc-cancelar').onclick = () => $('dialogo-doc').close();
 
@@ -906,24 +903,19 @@ $('form-doc').onsubmit = async (ev) => {
   ev.preventDefault();
   const f = ev.target;
   const erro = (m) => { $('erro-doc').textContent = m; };
-  let carro_id = f.carro_id.value;
-  let modeloDoc = null;
-  let placaDoc = null;
+  let carro_id = null;
+  let modeloDoc = f.modelo_doc.value.trim();
+  let placaDoc = f.placa_doc.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
   const tipo = f.tipo.value;
   const ehVideo = tipo === TIPO_VIDEO;
   const ehFotos = tipo === TIPO_FOTOS;
   const link = f.link.value.trim();
   const arq = ehVideo || ehFotos ? null : f.arquivo.files[0] || null;
   const video = ehVideo && usaDrive ? f.video.files[0] || null : null;
-  if (carro_id === '__novo') { // carro que não está na Frota: o documento guarda o modelo e a placa
-    modeloDoc = f.modelo_doc.value.trim();
-    placaDoc = f.placa_doc.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
-    if (!modeloDoc) return erro('Informe o modelo do carro.');
-    if (!PLACA_RE.test(placaDoc)) return erro('Placa inválida (ex.: ABC1D23 ou ABC1234).');
-    const jaCadastrado = carros.find((c) => c.placa === placaDoc);
-    if (jaCadastrado) { carro_id = jaCadastrado.id; modeloDoc = null; placaDoc = null; } // já está na Frota: usa o cadastro
-    else carro_id = null;
-  }
+  if (!modeloDoc) return erro('Informe o modelo do carro.');
+  if (!PLACA_RE.test(placaDoc)) return erro('Placa inválida (ex.: ABC1D23 ou ABC1234).');
+  const jaCadastrado = carros.find((c) => c.placa === placaDoc);
+  if (jaCadastrado) { carro_id = jaCadastrado.id; modeloDoc = null; placaDoc = null; } // já está na Frota: usa o cadastro
   if (ehFotos) {
     if (!fotosDocAtuais.length && !fotosDocNovas.length) return erro('Escolha pelo menos uma foto.');
   } else if (ehVideo && video) {
