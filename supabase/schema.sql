@@ -108,3 +108,18 @@ create policy "documentos: somente logados" on storage.objects
   with check (bucket_id = 'documentos');
 
 notify pgrst, 'reload schema';
+
+-- ===== Documento do tipo "Vídeo (link)": guarda só o link, sem arquivo =====
+alter table public.documentos add column if not exists link text;
+alter table public.documentos alter column arquivo drop not null;
+alter table public.documentos alter column nome_arquivo drop not null;
+
+alter table public.documentos drop constraint if exists documentos_link_http;
+alter table public.documentos add constraint documentos_link_http
+  check (link is null or link ~* '^https?://');
+
+alter table public.documentos drop constraint if exists documentos_tem_conteudo;
+alter table public.documentos add constraint documentos_tem_conteudo
+  check (arquivo is not null or link is not null);
+
+notify pgrst, 'reload schema';

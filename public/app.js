@@ -6,7 +6,8 @@ const B_PDF = 'contratos';
 const B_FOTOS = 'fotos';
 const B_DOCS = 'documentos';
 const TIPOS_DOC = ['CRLV (documento do carro)', 'Seguro', 'IPVA', 'Licenciamento', 'Contrato de locação',
-  'Vistoria', 'Nota fiscal', 'Manutenção', 'Multa', 'Outro'];
+  'Vistoria', 'Nota fiscal', 'Manutenção', 'Multa', 'Vídeo (link)', 'Outro'];
+const TIPO_VIDEO = 'Vídeo (link)'; // guarda só o link (Drive, YouTube...); o arquivo fica fora do Supabase
 const MAX_PDF = 10 * 1024 * 1024; // 10 MB, igual ao limite do bucket
 const MAX_FOTOS = 8;              // fotos por carro
 const MAX_FOTO_ORIGINAL = 30 * 1024 * 1024; // limite do arquivo escolhido, antes de reduzir
@@ -259,7 +260,7 @@ function desenhar() {
     excluir.onclick = async () => {
       const aviso = qtdDocs ? `\n\nOs ${qtdDocs} documento(s) deste carro também serão apagados.` : '';
       if (!confirm(`Excluir ${c.modelo} (${c.placa})?${aviso}`)) return;
-      const arquivosDocs = docs.filter((d) => d.carro_id === c.id).map((d) => d.arquivo);
+      const arquivosDocs = docs.filter((d) => d.carro_id === c.id).map((d) => d.arquivo).filter(Boolean);
       try {
         await dados.excluir(c.id);
         if (arquivosDocs.length) dados.removerArquivos(B_DOCS, arquivosDocs).catch(() => {});
@@ -464,7 +465,41 @@ function preencherSelect(sel, opcoes, valor) {
   if (opcoes.some(([v]) => v === valor)) sel.value = valor;
 }
 
+// Vídeos (links) de carros cujo contrato já terminou: o site não apaga nada no Drive, só avisa.
+function videosParaApagar() {
+  const mapa = new Map(carros.map((c) => [c.id, c]));
+  return docs.filter((d) => d.link && d.tipo === TIPO_VIDEO)
+    .map((d) => ({ d, c: mapa.get(d.carro_id) }))
+    .filter(({ c }) => c?.contrato_fim && diasAte(c.contrato_fim) < 0)
+    .sort((x, y) => x.c.contrato_fim.localeCompare(y.c.contrato_fim));
+}
+function desenharLembrete() {
+  const lista = docsErro ? [] : videosParaApagar();
+  const aba = document.querySelector('.aba[data-aba=docs]');
+  aba.replaceChildren('Documentos', ...(lista.length ? [el('span', { className: 'contagem', textContent: String(lista.length), title: 'Vídeos para apagar' })] : []));
+  const caixa = $('lembrete-videos');
+  caixa.hidden = !lista.length;
+  caixa.replaceChildren();
+  if (!lista.length) return;
+  caixa.append(
+    el('strong', { textContent: `Vídeos para apagar (${lista.length})` }),
+    el('p', { textContent: 'O contrato destes carros já terminou. Abra o vídeo, apague o arquivo no Google Drive (ou onde estiver) e depois clique em "Já apaguei" para tirar o aviso.' }));
+  for (const { d, c } of lista) {
+    const dias = -diasAte(c.contrato_fim);
+    const ver = el('a', { href: d.link, target: '_blank', rel: 'noopener noreferrer', textContent: 'Abrir vídeo' });
+    const feito = el('button', { type: 'button', className: 'sec', textContent: 'Já apaguei' });
+    feito.onclick = async () => {
+      if (!confirm(`Confirma que o vídeo de ${nomeCarro(c)} já foi apagado de onde estava hospedado?\n\nO link será removido do site.`)) return;
+      try { await dados.excluirDocumento(d.id); await recarregar(); } catch (e) { alert(erroAmigavel(e)); }
+    };
+    caixa.append(el('div', { className: 'lembrete-item' },
+      el('span', {}, el('b', { textContent: nomeCarro(c) }), ` · encerrado há ${dias} dia${dias === 1 ? '' : 's'}`),
+      el('span', { className: 'lembrete-acoes' }, ver, feito)));
+  }
+}
+
 function desenharDocs() {
+  desenharLembrete();
   const porCarro = [...carros].sort((x, y) => x.placa.localeCompare(y.placa));
   preencherSelect($('filtro-carro'), [['', 'Todos os carros'], ...porCarro.map((c) => [c.id, nomeCarro(c)])], $('filtro-carro').value);
   preencherSelect($('filtro-tipo'), [['', 'Todos os tipos'], ...TIPOS_DOC.map((t) => [t, t])], $('filtro-tipo').value);
@@ -484,8 +519,12 @@ function desenharDocs() {
   }
   for (const d of vis) {
     const c = mapa.get(d.carro_id);
-    const abrir = el('button', { className: 'link', textContent: 'Abrir', title: d.nome_arquivo });
-    abrir.onclick = () => abrirArquivo(B_DOCS, d.arquivo);
+    let abrir;
+    if (d.link) abrir = el('a', { href: d.link, target: '_blank', rel: 'noopener noreferrer', textContent: 'Assistir' });
+    else {
+      abrir = el('button', { className: 'link', textContent: 'Abrir', title: d.nome_arquivo || '' });
+      abrir.onclick = () => abrirArquivo(B_DOCS, d.arquivo);
+    }
     const editar = el('button', { className: 'link', textContent: 'Editar' });
     editar.onclick = () => abrirFormDoc(d);
     const excluir = el('button', { className: 'perigo', textContent: 'Excluir' });
@@ -493,7 +532,7 @@ function desenharDocs() {
       if (!confirm(`Excluir o documento "${d.tipo}" de ${nomeCarro(c)}?`)) return;
       try {
         await dados.excluirDocumento(d.id);
-        dados.removerArquivos(B_DOCS, [d.arquivo]).catch(() => {});
+        if (d.arquivo) dados.removerArquivos(B_DOCS, [d.arquivo]).catch(() => {});
         await recarregar();
       } catch (e) { alert(erroAmigavel(e)); }
     };
@@ -527,17 +566,22 @@ function abrirFormDoc(d = null) {
   f.descricao.value = d?.descricao || '';
   f.validade.value = d?.validade || '';
   f.arquivo.value = '';
-  $('doc-atual').textContent = d ? `Arquivo atual: ${d.nome_arquivo}. Escolher outro arquivo substitui este.` : '';
-  $('doc-atual').hidden = !d;
+  f.link.value = d?.link || '';
+  $('doc-atual').textContent = d?.arquivo ? `Arquivo atual: ${d.nome_arquivo}. Escolher outro arquivo substitui este.` : '';
   $('erro-doc').textContent = '';
-  atualizarDicaDescricao();
+  atualizarFormDoc();
   $('dialogo-doc').showModal();
 }
-function atualizarDicaDescricao() {
-  const outro = $('doc-tipo').value === 'Outro';
-  $('doc-desc-dica').textContent = outro ? '(obrigatória)' : '(opcional)';
+// Vídeo pede um link; os demais tipos pedem um arquivo.
+function atualizarFormDoc() {
+  const tipo = $('doc-tipo').value;
+  const video = tipo === TIPO_VIDEO;
+  $('rotulo-arquivo').hidden = video;
+  $('rotulo-link').hidden = !video;
+  $('doc-atual').hidden = video || !$('doc-atual').textContent;
+  $('doc-desc-dica').textContent = tipo === 'Outro' ? '(obrigatória)' : '(opcional)';
 }
-$('doc-tipo').onchange = atualizarDicaDescricao;
+$('doc-tipo').onchange = atualizarFormDoc;
 $('novo-doc').onclick = () => abrirFormDoc();
 $('doc-cancelar').onclick = () => $('dialogo-doc').close();
 
@@ -565,22 +609,28 @@ $('form-doc').onsubmit = async (ev) => {
   const tipo = f.tipo.value;
   const descricao = f.descricao.value.trim();
   const validade = f.validade.value || null;
-  const arq = f.arquivo.files[0] || null;
+  const ehVideo = tipo === TIPO_VIDEO;
+  const link = f.link.value.trim();
+  const arq = ehVideo ? null : f.arquivo.files[0] || null;
   if (!carro_id) return erro('Escolha o carro.');
   if (tipo === 'Outro' && !descricao) return erro('Descreva o documento (ex.: Apólice do seguro).');
-  if (!editandoDoc && !arq) return erro('Anexe o arquivo do documento (PDF ou foto).');
+  if (ehVideo) {
+    if (!link) return erro('Cole o link do vídeo (ex.: do Google Drive).');
+    if (!/^https?:\/\//i.test(link)) return erro('O link deve começar com http:// ou https://');
+  } else if (!arq && !editandoDoc?.arquivo) return erro('Anexe o arquivo do documento (PDF ou foto).');
   const antigo = editandoDoc?.arquivo || null;
   let novo = null;
   $('doc-salvar').disabled = true;
   try {
-    const campos = { carro_id, tipo, descricao: descricao || null, validade };
-    if (arq) {
+    const campos = { carro_id, tipo, descricao: descricao || null, validade, link: ehVideo ? link : null };
+    if (ehVideo) Object.assign(campos, { arquivo: null, nome_arquivo: null });
+    else if (arq) {
       const p = await prepararDocumento(arq);
       novo = await dados.enviarArquivo(B_DOCS, p.blob, p.ext, p.mime);
       Object.assign(campos, { arquivo: novo, nome_arquivo: p.nome });
     }
     await dados.salvarDocumento(editandoDoc?.id, campos);
-    if (novo && antigo) dados.removerArquivos(B_DOCS, [antigo]).catch(() => {});
+    if (antigo && (novo || ehVideo)) dados.removerArquivos(B_DOCS, [antigo]).catch(() => {}); // arquivo substituído ou trocado por link
     $('dialogo-doc').close();
     await recarregar();
   } catch (e) {

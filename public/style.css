@@ -88,6 +88,12 @@ select:focus { outline: 2px solid var(--marca); outline-offset: 1px; border-colo
 .doc-desc { display: block; color: var(--suave); font-size: .85rem; white-space: normal; }
 td.doc-nome { white-space: normal; max-width: 340px; }
 button:disabled { opacity: .6; cursor: not-allowed; }
+.contagem { display: inline-block; min-width: 20px; margin-left: 8px; padding: 0 6px; border-radius: 999px; background: var(--erro); color: #000; font-size: .75rem; line-height: 20px; text-align: center; }
+.lembrete { background: var(--aviso); border: 1px solid var(--marca); border-radius: 12px; padding: 12px 14px; margin-bottom: 14px; }
+.lembrete p { margin: 6px 0 10px; font-size: .9rem; color: var(--suave); }
+.lembrete-item { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 0; border-top: 1px solid var(--borda); font-size: .9rem; }
+.lembrete-acoes { display: flex; align-items: center; gap: 12px; }
+.lembrete-acoes button { padding: 6px 12px; }
 
 /* ---------- Responsivo ---------- */
 html { -webkit-text-size-adjust: 100%; }
@@ -148,3 +154,8 @@ img { max-width: 100%; }
   .barra { flex-wrap: wrap; }
   .barra button { flex: 1 1 100%; }
 }
+
+/* links da tabela com o mesmo aspecto dos botões "Abrir/Editar" */
+.tabela-wrap td a { display: inline-block; padding: 4px 8px; text-decoration: none; font-weight: 500; }
+@media (pointer: coarse) { .tabela-wrap td a { padding: 10px 12px; } }
+@media (max-width: 860px) { .tabela-wrap td[data-rotulo] a { padding: 0; } }

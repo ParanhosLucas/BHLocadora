@@ -52,6 +52,7 @@
     </section>
 
     <section id="tela-docs" hidden>
+      <div id="lembrete-videos" class="lembrete" hidden></div>
       <div class="barra filtros">
         <select id="filtro-carro" aria-label="Filtrar por carro"></select>
         <select id="filtro-tipo" aria-label="Filtrar por tipo de documento"></select>
@@ -107,7 +108,8 @@
       <label>Tipo de documento <select name="tipo" id="doc-tipo" required></select></label>
       <label>Descrição <span class="opcional" id="doc-desc-dica">(opcional)</span> <input name="descricao" maxlength="120" placeholder="ex.: Apólice Porto Seguro"></label>
       <label>Validade <span class="opcional">(opcional)</span> <input name="validade" type="date"></label>
-      <label>Arquivo (PDF ou foto, até 10 MB) <input name="arquivo" type="file" accept="application/pdf,.pdf,image/*"></label>
+      <label id="rotulo-arquivo">Arquivo (PDF ou foto, até 10 MB) <input name="arquivo" type="file" accept="application/pdf,.pdf,image/*"></label>
+      <label id="rotulo-link" hidden>Link do vídeo (Google Drive, YouTube...) <input name="link" type="url" placeholder="https://drive.google.com/..."></label>
       <p id="doc-atual" class="pdf-atual" hidden></p>
       <p class="erro" id="erro-doc" role="alert"></p>
       <div class="acoes">
