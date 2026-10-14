@@ -54,6 +54,7 @@
     <section id="tela-docs" hidden>
       <div id="lembrete-videos" class="lembrete" hidden></div>
       <div class="barra filtros">
+        <input id="busca-doc" type="search" placeholder="Buscar locatário, carro ou placa" aria-label="Buscar documentos">
         <select id="filtro-carro" aria-label="Filtrar por carro"></select>
         <select id="filtro-tipo" aria-label="Filtrar por tipo de documento"></select>
         <button id="novo-doc">+ Novo documento</button>
@@ -63,7 +64,7 @@
       <div class="tabela-wrap">
         <table>
           <thead>
-            <tr><th>Carro</th><th>Documento</th><th>Validade</th><th>Arquivo / vídeo</th><th></th></tr>
+            <tr><th>Locatário</th><th>Carro</th><th>Documento</th><th>Validade</th><th>Arquivo / vídeo</th><th></th></tr>
           </thead>
           <tbody id="lista-docs"></tbody>
         </table>
@@ -112,19 +113,28 @@
   <dialog id="dialogo-doc">
     <form id="form-doc" method="dialog">
       <h2 id="titulo-doc">Novo documento</h2>
+      <label>Locatário <span class="opcional">(opcional)</span> <input name="locatario" maxlength="120" list="lista-locatarios" autocomplete="off" placeholder="Nome de quem alugou o carro"></label>
+      <datalist id="lista-locatarios"></datalist>
       <label>Carro <select name="carro_id" id="doc-carro" required></select></label>
       <label>Tipo de documento <select name="tipo" id="doc-tipo" required></select></label>
-      <label>Descrição <span class="opcional" id="doc-desc-dica">(opcional)</span> <input name="descricao" maxlength="120" placeholder="ex.: Apólice Porto Seguro"></label>
       <label>Validade <span class="opcional">(opcional)</span> <input name="validade" type="date"></label>
       <label id="rotulo-arquivo">Arquivo (PDF ou foto, até 10 MB) <input name="arquivo" type="file" accept="application/pdf,.pdf,image/*"></label>
+      <div id="bloco-fotos-doc" hidden>
+        <span class="rotulo">Fotos (até 10)</span>
+        <div id="doc-fotos-grade" class="fotos-grade"></div>
+        <div class="fotos-barra">
+          <button type="button" class="sec" id="doc-fotos-botao">+ Adicionar fotos</button>
+          <span id="doc-fotos-contagem" class="resumo"></span>
+        </div>
+        <input id="doc-fotos-input" type="file" accept="image/*" multiple hidden>
+      </div>
       <div id="bloco-video" hidden>
         <p class="google-estado"></p>
         <button type="button" class="sec google-conectar">Conectar ao Google Drive</button>
         <label>Vídeo do celular (vai para o seu Google Drive) <input name="video" type="file" accept="video/*"></label>
         <progress id="video-progresso" max="100" value="0" hidden></progress>
-        <p class="opcional" id="video-ou">Ou, se o vídeo já está hospedado, cole o link abaixo.</p>
       </div>
-      <label id="rotulo-link" hidden>Link do vídeo (Google Drive, YouTube...) <input name="link" type="url" placeholder="https://drive.google.com/..."></label>
+      <label id="rotulo-link" hidden>Link do vídeo <input name="link" type="url" placeholder="https://drive.google.com/..."></label>
       <p id="doc-atual" class="pdf-atual" hidden></p>
       <p class="erro" id="erro-doc" role="alert"></p>
       <div class="acoes">

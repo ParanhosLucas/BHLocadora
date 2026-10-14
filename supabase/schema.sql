@@ -128,3 +128,14 @@ notify pgrst, 'reload schema';
 alter table public.documentos add column if not exists drive_id text;
 
 notify pgrst, 'reload schema';
+
+-- ===== Documentos: locatário e tipo "Fotos" (várias fotos num documento) =====
+alter table public.documentos add column if not exists locatario text
+  check (locatario is null or length(locatario) <= 120);
+alter table public.documentos add column if not exists fotos text[] not null default '{}';
+
+alter table public.documentos drop constraint if exists documentos_tem_conteudo;
+alter table public.documentos add constraint documentos_tem_conteudo
+  check (arquivo is not null or link is not null or cardinality(fotos) > 0);
+
+notify pgrst, 'reload schema';

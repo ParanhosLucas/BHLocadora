@@ -6,7 +6,8 @@ const B_PDF = 'contratos';
 const B_FOTOS = 'fotos';
 const B_DOCS = 'documentos';
 const TIPOS_DOC = ['CRLV (documento do carro)', 'Seguro', 'IPVA', 'Licenciamento', 'Contrato de locação',
-  'Vistoria', 'Nota fiscal', 'Manutenção', 'Multa', 'Vídeo', 'Outro'];
+  'Vistoria', 'Nota fiscal', 'Manutenção', 'Multa', 'Fotos', 'Vídeo'];
+const TIPO_FOTOS = 'Fotos'; // várias fotos (até MAX_FOTOS) num único documento, só imagens
 const GOOGLE_ID = cfg.GOOGLE_CLIENT_ID || '';
 const usaDrive = !!GOOGLE_ID; // sem o ID do Google, o envio direto fica desligado
 const TIPO_VIDEO = 'Vídeo'; // guarda só o link/ID (Drive, YouTube...); o arquivo fica fora do Supabase
@@ -264,7 +265,7 @@ function desenhar() {
       const aviso = (qtdDocs ? `\n\nOs ${qtdDocs} documento(s) deste carro também serão apagados.` : '')
         + (videosDrive.length ? `\n\n${videosDrive.length} vídeo(s) também serão apagados do seu Google Drive.` : '');
       if (!confirm(`Excluir ${c.modelo} (${c.placa})?${aviso}`)) return;
-      const arquivosDocs = docs.filter((d) => d.carro_id === c.id).map((d) => d.arquivo).filter(Boolean);
+      const arquivosDocs = docs.filter((d) => d.carro_id === c.id).flatMap(arquivosDoDoc);
       try {
         for (const v of videosDrive) if (!(await apagarVideoDoDrive(v.drive_id))) return; // 1º: a janela do Google abre direto do clique
         await dados.excluir(c.id);
@@ -308,17 +309,18 @@ function desenharGaleria() {
   $('gal-pos').textContent = `${i + 1} / ${urls.length}`;
   $('gal-ant').disabled = $('gal-prox').disabled = urls.length < 2;
 }
-async function abrirGaleria(c) {
-  const fotos = fotosDe(c);
+// Abre a galeria com fotos de qualquer espaço do Storage (fotos do carro ou fotos de um documento).
+async function abrirGaleriaDe(titulo, fotos, bucket) {
   try {
-    const mapa = await urlsComCache(B_FOTOS, fotos);
+    const mapa = await urlsComCache(bucket, fotos);
     galeria = { urls: fotos.map((f) => mapa.get(f)).filter(Boolean), i: 0 };
   } catch (e) { return alert(erroAmigavel(e)); }
   if (!galeria.urls.length) return alert('Não foi possível carregar as fotos.');
-  $('gal-titulo').textContent = `${c.modelo} · ${c.placa}`;
+  $('gal-titulo').textContent = titulo;
   desenharGaleria();
   $('galeria').showModal();
 }
+const abrirGaleria = (c) => abrirGaleriaDe(`${c.modelo} · ${c.placa}`, fotosDe(c), B_FOTOS);
 const moverGaleria = (d) => { const n = galeria.urls.length; galeria.i = (galeria.i + d + n) % n; desenharGaleria(); };
 $('gal-ant').onclick = () => moverGaleria(-1);
 $('gal-prox').onclick = () => moverGaleria(1);
@@ -676,32 +678,47 @@ function desenharLembrete() {
   }
 }
 
+const fotosDoc = (d) => d.fotos || [];
+const arquivosDoDoc = (d) => [d.arquivo, ...fotosDoc(d)].filter(Boolean);
+// tipos fixos + tipos antigos que ainda existam nos dados (ex.: "Outro", que foi retirado do formulário)
+const tiposDoFiltro = () => [...new Set([...TIPOS_DOC, ...docs.map((d) => d.tipo)])];
+
 function desenharDocs() {
   desenharLembrete();
   const porCarro = [...carros].sort(porModelo);
   preencherSelect($('filtro-carro'), [['', 'Todos os carros'], ...porCarro.map((c) => [c.id, nomeCarro(c)])], $('filtro-carro').value);
-  preencherSelect($('filtro-tipo'), [['', 'Todos os tipos'], ...TIPOS_DOC.map((t) => [t, t])], $('filtro-tipo').value);
+  preencherSelect($('filtro-tipo'), [['', 'Todos os tipos'], ...tiposDoFiltro().map((t) => [t, t])], $('filtro-tipo').value);
+  $('lista-locatarios').replaceChildren(...[...new Set(docs.map((d) => d.locatario).filter(Boolean))].sort().map((n) => el('option', { value: n })));
   $('erro-docs').textContent = docsErro;
   $('novo-doc').disabled = !carros.length || !!docsErro;
   const fc = $('filtro-carro').value, ft = $('filtro-tipo').value;
+  const termo = $('busca-doc').value.trim().toLowerCase();
   const mapa = new Map(carros.map((c) => [c.id, c]));
-  const vis = docs.filter((d) => (!fc || d.carro_id === fc) && (!ft || d.tipo === ft))
-    .sort((x, y) => {
-      const cx = mapa.get(x.carro_id), cy = mapa.get(y.carro_id);
-      return (cx && cy ? porModelo(cx, cy) : 0) || x.tipo.localeCompare(y.tipo);
-    });
+  const vis = docs.filter((d) => {
+    const c = mapa.get(d.carro_id);
+    return (!fc || d.carro_id === fc) && (!ft || d.tipo === ft)
+      && (!termo || `${d.locatario || ''} ${c?.modelo || ''} ${c?.placa || ''} ${d.tipo}`.toLowerCase().includes(termo));
+  }).sort((x, y) => {
+    if (!!x.locatario !== !!y.locatario) return x.locatario ? -1 : 1; // com locatário primeiro
+    const r = x.locatario && y.locatario ? x.locatario.localeCompare(y.locatario) : 0;
+    const cx = mapa.get(x.carro_id), cy = mapa.get(y.carro_id);
+    return r || (cx && cy ? porModelo(cx, cy) : 0) || x.tipo.localeCompare(y.tipo);
+  });
   $('resumo-docs').textContent = docsErro ? '' : `${vis.length} de ${docs.length} documento(s)`;
   const corpo = $('lista-docs');
   corpo.replaceChildren();
   if (!vis.length) {
     const msg = docsErro ? '' : !carros.length ? 'Cadastre um carro na aba Frota para anexar documentos.' : docs.length ? 'Nenhum documento com esse filtro.' : 'Nenhum documento cadastrado ainda.';
-    corpo.append(el('tr', {}, el('td', { colSpan: 5, className: 'vazio', textContent: msg })));
+    corpo.append(el('tr', {}, el('td', { colSpan: 6, className: 'vazio', textContent: msg })));
     return;
   }
   for (const d of vis) {
     const c = mapa.get(d.carro_id);
     let abrir;
-    if (d.link) abrir = el('a', { href: d.link, target: '_blank', rel: 'noopener noreferrer', textContent: 'Assistir' });
+    if (d.tipo === TIPO_FOTOS) {
+      abrir = el('button', { className: 'link', textContent: `Ver fotos (${fotosDoc(d).length})` });
+      abrir.onclick = () => abrirGaleriaDe(`${d.locatario ? `${d.locatario} · ` : ''}${nomeCarro(c)}`, fotosDoc(d), B_DOCS);
+    } else if (d.link) abrir = el('a', { href: d.link, target: '_blank', rel: 'noopener noreferrer', textContent: 'Assistir' });
     else {
       abrir = el('button', { className: 'link', textContent: 'Abrir', title: d.nome_arquivo || '' });
       abrir.onclick = () => abrirArquivo(B_DOCS, d.arquivo);
@@ -715,22 +732,24 @@ function desenharDocs() {
       try {
         if (d.drive_id && !(await apagarVideoDoDrive(d.drive_id))) return;
         await dados.excluirDocumento(d.id);
-        if (d.arquivo) dados.removerArquivos(B_DOCS, [d.arquivo]).catch(() => {});
+        dados.removerArquivos(B_DOCS, arquivosDoDoc(d)).catch(() => {});
         await recarregar();
       } catch (e) { alert(erroAmigavel(e)); }
     };
     const tipo = el('td', { className: 'doc-nome' }, el('strong', { textContent: d.tipo }));
-    if (d.descricao) tipo.append(el('span', { className: 'doc-desc', textContent: d.descricao }));
+    if (d.descricao) tipo.append(el('span', { className: 'doc-desc', textContent: d.descricao })); // documentos antigos
     corpo.append(el('tr', { className: 'linha-doc' },
+      el('td', { className: `doc-locatario${d.locatario ? '' : ' sem-loc'}`, textContent: d.locatario || '—' }),
       el('td', { className: 'doc-carro' }, el('span', { className: 'doc-modelo', textContent: c?.modelo || 'Carro removido' }), el('span', { className: 'placa', textContent: c?.placa || '' })),
       tipo,
       rotulo(celulaFim(d.validade), 'Validade'),
-      rotulo(el('td', {}, abrir), d.tipo === TIPO_VIDEO ? 'Vídeo' : 'Arquivo'),
+      rotulo(el('td', {}, abrir), d.tipo === TIPO_VIDEO ? 'Vídeo' : d.tipo === TIPO_FOTOS ? 'Fotos' : 'Arquivo'),
       el('td', { className: 'acoes-linha' }, editar, excluir)));
   }
 }
 $('filtro-carro').onchange = desenharDocs;
 $('filtro-tipo').onchange = desenharDocs;
+$('busca-doc').oninput = desenharDocs;
 
 function irParaDocs(carroId) {
   mostrarAba('docs');
@@ -738,35 +757,87 @@ function irParaDocs(carroId) {
   desenharDocs();
 }
 
+// ----- fotos de um documento do tipo "Fotos" -----
 let editandoDoc = null;
-function abrirFormDoc(d = null) {
+let fotosDocAtuais = []; // caminhos já salvos que continuam
+let fotosDocNovas = [];  // arquivos escolhidos agora
+let urlsDocAtuais = new Map();
+let urlsDocNovas = [];
+
+function desenharFotosDoc() {
+  urlsDocNovas.forEach((u) => URL.revokeObjectURL(u));
+  urlsDocNovas = fotosDocNovas.map((f) => URL.createObjectURL(f));
+  const grade = $('doc-fotos-grade');
+  grade.replaceChildren();
+  const item = (src, alt, aoRemover) => {
+    const x = el('button', { type: 'button', className: 'x', textContent: '×', title: 'Remover foto', ariaLabel: `Remover ${alt}` });
+    x.onclick = aoRemover;
+    return el('div', { className: 'foto-item' }, el('img', { src, alt }), x);
+  };
+  fotosDocAtuais.forEach((p, i) => grade.append(item(urlsDocAtuais.get(p) || '', `foto ${i + 1}`, () => { fotosDocAtuais = fotosDocAtuais.filter((x) => x !== p); desenharFotosDoc(); })));
+  fotosDocNovas.forEach((f, i) => {
+    const it = item(urlsDocNovas[i], f.name, () => { fotosDocNovas.splice(i, 1); desenharFotosDoc(); });
+    it.querySelector('img').onerror = () => { // arquivo que não abre como imagem sai da lista
+      fotosDocNovas = fotosDocNovas.filter((x) => x !== f);
+      $('erro-doc').textContent = `"${f.name}" não é uma imagem válida e foi removida.`;
+      desenharFotosDoc();
+    };
+    grade.append(it);
+  });
+  $('doc-fotos-contagem').textContent = `${fotosDocAtuais.length + fotosDocNovas.length} de ${MAX_FOTOS} fotos`;
+}
+$('doc-fotos-botao').onclick = () => $('doc-fotos-input').click();
+$('doc-fotos-input').onchange = (ev) => {
+  const erro = [];
+  for (const f of ev.target.files) {
+    if (fotosDocAtuais.length + fotosDocNovas.length >= MAX_FOTOS) { erro.push(`Máximo de ${MAX_FOTOS} fotos por documento.`); break; }
+    if (!f.type.startsWith('image/')) { erro.push(`"${f.name}" não é uma imagem.`); continue; }
+    if (f.size > MAX_FOTO_ORIGINAL) { erro.push(`"${f.name}" é grande demais (máximo 30 MB).`); continue; }
+    fotosDocNovas.push(f);
+  }
+  ev.target.value = '';
+  desenharFotosDoc();
+  if (erro.length) $('erro-doc').textContent = erro.join(' ');
+};
+
+async function abrirFormDoc(d = null) {
   editandoDoc = d;
   $('titulo-doc').textContent = d ? 'Editar documento' : 'Novo documento';
   const f = $('form-doc');
   const porCarro = [...carros].sort(porModelo);
+  f.locatario.value = d?.locatario || '';
   preencherSelect($('doc-carro'), porCarro.map((c) => [c.id, nomeCarro(c)]), d?.carro_id || $('filtro-carro').value);
-  preencherSelect($('doc-tipo'), TIPOS_DOC.map((t) => [t, t]), d?.tipo);
-  f.descricao.value = d?.descricao || '';
+  // documento antigo com um tipo que saiu da lista (ex.: "Outro") continua editável sem perder o tipo
+  const tipos = d && !TIPOS_DOC.includes(d.tipo) ? [...TIPOS_DOC, d.tipo] : TIPOS_DOC;
+  preencherSelect($('doc-tipo'), tipos.map((t) => [t, t]), d?.tipo);
   f.validade.value = d?.validade || '';
   f.arquivo.value = '';
-  f.link.value = d?.link || '';
+  f.link.value = d?.link || ''; // o campo fica oculto quando o envio para o Drive está ligado; o valor é mantido
   f.video.value = '';
+  fotosDocAtuais = d ? [...fotosDoc(d)] : [];
+  fotosDocNovas = [];
+  urlsDocAtuais = new Map();
   $('video-progresso').hidden = true;
   $('doc-atual').textContent = d?.arquivo ? `Arquivo atual: ${d.nome_arquivo}. Escolher outro arquivo substitui este.` : '';
   $('erro-doc').textContent = '';
   atualizarFormDoc();
+  desenharFotosDoc();
   $('dialogo-doc').showModal();
+  if (fotosDocAtuais.length) {
+    try { urlsDocAtuais = await urlsComCache(B_DOCS, fotosDocAtuais); desenharFotosDoc(); } catch { /* miniaturas são opcionais */ }
+  }
 }
-// Vídeo pede um link; os demais tipos pedem um arquivo.
+// Cada tipo mostra só o que usa: PDF/foto, várias fotos, ou vídeo (envio para o Drive).
 function atualizarFormDoc() {
   const tipo = $('doc-tipo').value;
   const video = tipo === TIPO_VIDEO;
-  $('rotulo-arquivo').hidden = video;
-  $('rotulo-link').hidden = !video;
+  const fotos = tipo === TIPO_FOTOS;
+  $('rotulo-arquivo').hidden = video || fotos;
+  $('bloco-fotos-doc').hidden = !fotos;
   $('bloco-video').hidden = !(video && usaDrive);
+  $('rotulo-link').hidden = !(video && !usaDrive); // o link só aparece se o envio direto estiver desligado
   atualizarEstadoGoogle();
-  $('doc-atual').hidden = video || !$('doc-atual').textContent;
-  $('doc-desc-dica').textContent = tipo === 'Outro' ? '(obrigatória)' : '(opcional)';
+  $('doc-atual').hidden = video || fotos || !$('doc-atual').textContent;
 }
 $('doc-tipo').onchange = atualizarFormDoc;
 $('novo-doc').onclick = () => abrirFormDoc();
@@ -794,28 +865,33 @@ $('form-doc').onsubmit = async (ev) => {
   const erro = (m) => { $('erro-doc').textContent = m; };
   const carro_id = f.carro_id.value;
   const tipo = f.tipo.value;
-  const descricao = f.descricao.value.trim();
+  const locatario = f.locatario.value.trim() || null;
   const validade = f.validade.value || null;
   const ehVideo = tipo === TIPO_VIDEO;
+  const ehFotos = tipo === TIPO_FOTOS;
   const link = f.link.value.trim();
-  const arq = ehVideo ? null : f.arquivo.files[0] || null;
+  const arq = ehVideo || ehFotos ? null : f.arquivo.files[0] || null;
   const video = ehVideo && usaDrive ? f.video.files[0] || null : null;
   if (!carro_id) return erro('Escolha o carro.');
-  if (tipo === 'Outro' && !descricao) return erro('Descreva o documento (ex.: Apólice do seguro).');
-  if (ehVideo && video) {
+  if (ehFotos) {
+    if (!fotosDocAtuais.length && !fotosDocNovas.length) return erro('Escolha pelo menos uma foto.');
+  } else if (ehVideo && video) {
     if (!video.type.startsWith('video/')) return erro('O arquivo escolhido não é um vídeo.');
     if (!driveConectado()) return erro('Toque em "Conectar ao Google Drive" antes de enviar o vídeo.');
   } else if (ehVideo) {
-    if (!link) return erro(usaDrive ? 'Escolha o vídeo para enviar ou cole um link.' : 'Cole o link do vídeo (ex.: do Google Drive).');
+    if (!link) return erro(usaDrive ? 'Escolha o vídeo do celular para enviar.' : 'Cole o link do vídeo (ex.: do Google Drive).');
     if (!/^https?:\/\//i.test(link)) return erro('O link deve começar com http:// ou https://');
   } else if (!arq && !editandoDoc?.arquivo) return erro('Anexe o arquivo do documento (PDF ou foto).');
   const antigo = editandoDoc?.arquivo || null;
   const antigoDrive = editandoDoc?.drive_id || null;
+  const fotosAntigas = editandoDoc ? fotosDoc(editandoDoc) : [];
+  const enviadas = []; // fotos subidas agora; apagadas se o salvamento falhar
   let novo = null;
   let driveNovo = null;
   $('doc-salvar').disabled = true;
   try {
-    const campos = { carro_id, tipo, descricao: descricao || null, validade, link: ehVideo ? link : null, drive_id: null };
+    // "descricao" não é mais preenchida aqui: fica de fora para não apagar a de documentos antigos
+    const campos = { carro_id, tipo, locatario, validade, link: ehVideo ? link : null, drive_id: null, fotos: [] };
     if (ehVideo && video) {
       const carro = carros.find((c) => c.id === carro_id);
       const barra = $('video-progresso');
@@ -825,21 +901,34 @@ $('form-doc').onsubmit = async (ev) => {
         $('doc-salvar').textContent = pct < 100 ? `Enviando vídeo… ${pct}%` : 'Finalizando…';
       });
       Object.assign(campos, { link: `https://drive.google.com/file/d/${driveNovo}/view`, drive_id: driveNovo });
+    } else if (ehVideo && editandoDoc?.drive_id && link === editandoDoc.link) {
+      campos.drive_id = editandoDoc.drive_id; // editou só os dados: o vídeo continua o mesmo no Drive
     }
-    if (ehVideo) Object.assign(campos, { arquivo: null, nome_arquivo: null });
-    else if (arq) {
+    if (ehFotos) {
+      for (const [i, foto] of fotosDocNovas.entries()) {
+        $('doc-salvar').textContent = `Enviando foto ${i + 1}/${fotosDocNovas.length}…`;
+        enviadas.push(await dados.enviarArquivo(B_DOCS, await reduzirFoto(foto, 1600, 0.82), 'jpg', 'image/jpeg'));
+      }
+      Object.assign(campos, { fotos: [...fotosDocAtuais, ...enviadas], arquivo: null, nome_arquivo: null, link: null });
+    } else if (ehVideo) {
+      Object.assign(campos, { arquivo: null, nome_arquivo: null });
+    } else if (arq) {
       const p = await prepararDocumento(arq);
       novo = await dados.enviarArquivo(B_DOCS, p.blob, p.ext, p.mime);
       Object.assign(campos, { arquivo: novo, nome_arquivo: p.nome });
     }
     await dados.salvarDocumento(editandoDoc?.id, campos);
-    if (antigo && (novo || ehVideo)) dados.removerArquivos(B_DOCS, [antigo]).catch(() => {}); // arquivo substituído ou trocado por link
-    // vídeo antigo do Drive substituído: apaga se a conexão ainda valer (senão, fica no Drive)
+    // apaga o que deixou de ser usado: fotos removidas e arquivo substituído ou trocado de formato
+    const manter = new Set(campos.fotos);
+    const sobras = fotosAntigas.filter((p) => !manter.has(p));
+    if (antigo && (novo || ehVideo || ehFotos)) sobras.push(antigo);
+    if (sobras.length) dados.removerArquivos(B_DOCS, sobras).catch(() => {});
     if (antigoDrive && antigoDrive !== campos.drive_id && driveConectado()) apagarNoDrive(antigoDrive).catch(() => {});
     $('dialogo-doc').close();
     await recarregar();
   } catch (e) {
-    if (novo) dados.removerArquivos(B_DOCS, [novo]).catch(() => {});
+    const soltos = [novo, ...enviadas].filter(Boolean);
+    if (soltos.length) dados.removerArquivos(B_DOCS, soltos).catch(() => {});
     if (driveNovo && driveConectado()) apagarNoDrive(driveNovo).catch(() => {}); // não deixa vídeo solto no Drive
     erro(erroAmigavel(e));
   } finally { $('doc-salvar').disabled = false; $('doc-salvar').textContent = 'Salvar'; $('video-progresso').hidden = true; }
