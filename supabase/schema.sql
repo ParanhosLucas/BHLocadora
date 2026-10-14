@@ -22,3 +22,12 @@ create policy "somente logados" on public.carros
 -- O papel "anon" (visitante sem login) não recebe nenhuma permissão.
 grant usage on schema public to authenticated;
 grant select, insert, update, delete on public.carros to authenticated;
+
+-- Datas do contrato (idempotente: pode rodar de novo sem problema).
+alter table public.carros
+  add column if not exists contrato_inicio date,
+  add column if not exists contrato_fim    date;
+
+alter table public.carros drop constraint if exists carros_datas_validas;
+alter table public.carros add constraint carros_datas_validas
+  check (contrato_inicio is null or contrato_fim is null or contrato_fim >= contrato_inicio);

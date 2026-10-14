@@ -52,6 +52,22 @@ const dados = {
 let carros = [];
 let editando = null;
 
+// Datas "YYYY-MM-DD" são tratadas como datas de calendário, sem fuso horário.
+const fmtData = (d) => (d ? d.split('-').reverse().join('/') : '—');
+const diasAte = (d) => {
+  const [y, m, dia] = d.split('-').map(Number);
+  const hoje = new Date();
+  return Math.round((new Date(y, m - 1, dia) - new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate())) / 86400000);
+};
+function celulaFim(d) {
+  const td = el('td', { textContent: fmtData(d) });
+  if (!d) return td;
+  const n = diasAte(d);
+  if (n < 0) td.append(el('span', { className: 'etiqueta vencido', textContent: 'Vencido' }));
+  else if (n <= 30) td.append(el('span', { className: 'etiqueta', textContent: n === 0 ? 'Vence hoje' : `Vence em ${n}d` }));
+  return td;
+}
+
 const el = (tag, props = {}, ...filhos) => {
   const e = Object.assign(document.createElement(tag), props);
   e.append(...filhos);
@@ -65,7 +81,7 @@ function desenhar() {
   const corpo = $('lista');
   corpo.replaceChildren();
   if (!vis.length) {
-    corpo.append(el('tr', {}, el('td', { colSpan: 5, className: 'vazio', textContent: carros.length ? 'Nenhum carro encontrado.' : 'Nenhum carro cadastrado ainda.' })));
+    corpo.append(el('tr', {}, el('td', { colSpan: 7, className: 'vazio', textContent: carros.length ? 'Nenhum carro encontrado.' : 'Nenhum carro cadastrado ainda.' })));
     return;
   }
   for (const c of vis) {
@@ -83,6 +99,8 @@ function desenhar() {
       el('td', { className: 'placa', textContent: c.placa }),
       el('td', { textContent: c.modelo }),
       el('td', { className: 'num', textContent: c.km.toLocaleString('pt-BR') }),
+      el('td', { textContent: fmtData(c.contrato_inicio) }),
+      celulaFim(c.contrato_fim),
       el('td', {}, contrato),
       el('td', { className: 'acoes-linha' }, editar, excluir)));
   }
@@ -101,6 +119,8 @@ function abrirForm(c = null) {
   f.modelo.value = c?.modelo || '';
   f.km.value = c?.km ?? '';
   f.contrato_url.value = c?.contrato_url || '';
+  f.contrato_inicio.value = c?.contrato_inicio || '';
+  f.contrato_fim.value = c?.contrato_fim || '';
   $('erro-form').textContent = '';
   $('dialogo').showModal();
   f.placa.focus();
@@ -131,13 +151,16 @@ $('form-carro').onsubmit = async (ev) => {
   const modelo = f.modelo.value.trim();
   const km = Number(f.km.value);
   const link = f.contrato_url.value.trim();
+  const inicio = f.contrato_inicio.value || null;
+  const fim = f.contrato_fim.value || null;
   const erro = (m) => { $('erro-form').textContent = m; };
   if (!PLACA_RE.test(placa)) return erro('Placa inválida (ex.: ABC1D23 ou ABC1234).');
   if (!modelo) return erro('Informe o modelo.');
   if (!Number.isInteger(km) || km < 0) return erro('Km deve ser um número inteiro, 0 ou maior.');
   if (link && !/^https?:\/\//i.test(link)) return erro('O link do contrato deve começar com http:// ou https://');
+  if (inicio && fim && fim < inicio) return erro('O término do contrato não pode ser antes do início.');
   try {
-    await dados.salvar(editando?.id, { placa, modelo, km, contrato_url: link || null });
+    await dados.salvar(editando?.id, { placa, modelo, km, contrato_url: link || null, contrato_inicio: inicio, contrato_fim: fim });
     $('dialogo').close();
     await recarregar();
   } catch (e) { erro(erroAmigavel(e)); }
