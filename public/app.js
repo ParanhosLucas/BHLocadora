@@ -276,8 +276,8 @@ function desenhar() {
     };
     corpo.append(el('tr', {},
       celulaFoto(c),
-      el('td', { className: 'placa', textContent: c.placa }),
       el('td', { className: 'modelo', textContent: c.modelo }),
+      el('td', { className: 'placa', textContent: c.placa }),
       rotulo(el('td', { className: 'num', textContent: c.km.toLocaleString('pt-BR') }), 'Km'),
       rotulo(el('td', { textContent: fmtData(c.contrato_inicio) }), 'Início'),
       rotulo(celulaFim(c.contrato_fim), 'Término'),
@@ -628,7 +628,8 @@ async function apagarVideoDoDrive(id) {
 }
 
 // ---------- Documentos ----------
-const nomeCarro = (c) => (c ? `${c.placa} · ${c.modelo}` : 'Carro removido');
+const nomeCarro = (c) => (c ? `${c.modelo} · ${c.placa}` : 'Carro removido');
+const porModelo = (x, y) => x.modelo.localeCompare(y.modelo) || x.placa.localeCompare(y.placa);
 
 function preencherSelect(sel, opcoes, valor) {
   sel.replaceChildren(...opcoes.map(([v, t]) => el('option', { value: v, textContent: t })));
@@ -677,7 +678,7 @@ function desenharLembrete() {
 
 function desenharDocs() {
   desenharLembrete();
-  const porCarro = [...carros].sort((x, y) => x.placa.localeCompare(y.placa));
+  const porCarro = [...carros].sort(porModelo);
   preencherSelect($('filtro-carro'), [['', 'Todos os carros'], ...porCarro.map((c) => [c.id, nomeCarro(c)])], $('filtro-carro').value);
   preencherSelect($('filtro-tipo'), [['', 'Todos os tipos'], ...TIPOS_DOC.map((t) => [t, t])], $('filtro-tipo').value);
   $('erro-docs').textContent = docsErro;
@@ -685,7 +686,10 @@ function desenharDocs() {
   const fc = $('filtro-carro').value, ft = $('filtro-tipo').value;
   const mapa = new Map(carros.map((c) => [c.id, c]));
   const vis = docs.filter((d) => (!fc || d.carro_id === fc) && (!ft || d.tipo === ft))
-    .sort((x, y) => (mapa.get(x.carro_id)?.placa || '').localeCompare(mapa.get(y.carro_id)?.placa || '') || x.tipo.localeCompare(y.tipo));
+    .sort((x, y) => {
+      const cx = mapa.get(x.carro_id), cy = mapa.get(y.carro_id);
+      return (cx && cy ? porModelo(cx, cy) : 0) || x.tipo.localeCompare(y.tipo);
+    });
   $('resumo-docs').textContent = docsErro ? '' : `${vis.length} de ${docs.length} documento(s)`;
   const corpo = $('lista-docs');
   corpo.replaceChildren();
@@ -718,10 +722,10 @@ function desenharDocs() {
     const tipo = el('td', { className: 'doc-nome' }, el('strong', { textContent: d.tipo }));
     if (d.descricao) tipo.append(el('span', { className: 'doc-desc', textContent: d.descricao }));
     corpo.append(el('tr', { className: 'linha-doc' },
-      el('td', { className: 'doc-carro' }, el('span', { className: 'placa', textContent: c?.placa || '—' }), el('span', { className: 'doc-desc', textContent: c?.modelo || 'Carro removido' })),
+      el('td', { className: 'doc-carro' }, el('span', { className: 'doc-modelo', textContent: c?.modelo || 'Carro removido' }), el('span', { className: 'placa', textContent: c?.placa || '' })),
       tipo,
       rotulo(celulaFim(d.validade), 'Validade'),
-      rotulo(el('td', {}, abrir), 'Arquivo'),
+      rotulo(el('td', {}, abrir), d.tipo === TIPO_VIDEO ? 'Vídeo' : 'Arquivo'),
       el('td', { className: 'acoes-linha' }, editar, excluir)));
   }
 }
@@ -739,7 +743,7 @@ function abrirFormDoc(d = null) {
   editandoDoc = d;
   $('titulo-doc').textContent = d ? 'Editar documento' : 'Novo documento';
   const f = $('form-doc');
-  const porCarro = [...carros].sort((x, y) => x.placa.localeCompare(y.placa));
+  const porCarro = [...carros].sort(porModelo);
   preencherSelect($('doc-carro'), porCarro.map((c) => [c.id, nomeCarro(c)]), d?.carro_id || $('filtro-carro').value);
   preencherSelect($('doc-tipo'), TIPOS_DOC.map((t) => [t, t]), d?.tipo);
   f.descricao.value = d?.descricao || '';
