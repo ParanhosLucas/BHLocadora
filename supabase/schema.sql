@@ -139,3 +139,16 @@ alter table public.documentos add constraint documentos_tem_conteudo
   check (arquivo is not null or link is not null or cardinality(fotos) > 0);
 
 notify pgrst, 'reload schema';
+
+-- ===== Documentos de carros que ainda não estão na Frota: guardam o modelo e a placa =====
+alter table public.documentos alter column carro_id drop not null;
+alter table public.documentos add column if not exists modelo text
+  check (modelo is null or length(modelo) <= 80);
+alter table public.documentos add column if not exists placa text
+  check (placa is null or placa ~ '^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$');
+
+alter table public.documentos drop constraint if exists documentos_tem_carro;
+alter table public.documentos add constraint documentos_tem_carro
+  check (carro_id is not null or (placa is not null and modelo is not null));
+
+notify pgrst, 'reload schema';

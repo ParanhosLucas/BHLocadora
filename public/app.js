@@ -83,6 +83,16 @@ const dados = {
     const { error } = await q;
     if (error) throw error;
   },
+  // Documento de carro que ainda não estava na Frota: quando o carro é cadastrado, os documentos com a mesma placa passam a apontar para ele.
+  async vincularDocumentos(placa, carroId) {
+    if (demo) {
+      const l = lerDemoDocs();
+      l.forEach((d) => { if (!d.carro_id && d.placa === placa) Object.assign(d, { carro_id: carroId, modelo: null, placa: null }); });
+      return gravarDemoDocs(l);
+    }
+    const { error } = await sb.from('documentos').update({ carro_id: carroId, modelo: null, placa: null }).is('carro_id', null).eq('placa', placa);
+    if (error) throw error;
+  },
   async excluirDocumento(id) {
     if (demo) return gravarDemoDocs(lerDemoDocs().filter((x) => x.id !== id));
     const { error } = await sb.from('documentos').delete().eq('id', id);
@@ -481,6 +491,7 @@ $('form-carro').onsubmit = async (ev) => {
     }
     await dados.salvar(editando?.id, editando ? campos : { id: idCarro, ...campos });
     carroSalvo = true;
+    if (!editando) await dados.vincularDocumentos(placa, idCarro).catch(() => {}); // melhor esforço
     if (driveNovo) {
       try {
         await dados.salvarDocumento(null, { carro_id: idCarro, tipo: TIPO_VIDEO, descricao: null, validade: null, arquivo: null, nome_arquivo: null,
@@ -679,6 +690,8 @@ function desenharLembrete() {
   }
 }
 
+// Documento de carro cadastrado usa o cadastro; senão usa o modelo e a placa digitados no próprio documento.
+const carroDoDoc = (d, mapa) => mapa.get(d.carro_id) || (d.placa ? { modelo: d.modelo || '', placa: d.placa, naoCadastrado: true } : null);
 const fotosDoc = (d) => d.fotos || [];
 const arquivosDoDoc = (d) => [d.arquivo, ...fotosDoc(d)].filter(Boolean);
 // tipos fixos + tipos antigos que ainda existam nos dados (ex.: "Outro", que foi retirado do formulário)
@@ -687,31 +700,35 @@ const tiposDoFiltro = () => [...new Set([...TIPOS_DOC, ...docs.map((d) => d.tipo
 function desenharDocs() {
   desenharLembrete();
   const porCarro = [...carros].sort(porModelo);
-  preencherSelect($('filtro-carro'), [['', 'Todos os carros'], ...porCarro.map((c) => [c.id, nomeCarro(c)])], $('filtro-carro').value);
+  const semCadastro = [...new Map(docs.filter((d) => !d.carro_id && d.placa).map((d) => [d.placa, d])).values()]
+    .sort((x, y) => (x.modelo || '').localeCompare(y.modelo || ''));
+  preencherSelect($('filtro-carro'), [['', 'Todos os carros'], ...porCarro.map((c) => [c.id, nomeCarro(c)]),
+    ...semCadastro.map((d) => [`placa:${d.placa}`, `${d.modelo} · ${d.placa} (não cadastrado)`])], $('filtro-carro').value);
   preencherSelect($('filtro-tipo'), [['', 'Todos os tipos'], ...tiposDoFiltro().map((t) => [t, t])], $('filtro-tipo').value);
   $('erro-docs').textContent = docsErro;
-  $('novo-doc').disabled = !carros.length || !!docsErro;
+  $('novo-doc').disabled = !!docsErro;
   const fc = $('filtro-carro').value, ft = $('filtro-tipo').value;
   const termo = $('busca-doc').value.trim().toLowerCase();
   const mapa = new Map(carros.map((c) => [c.id, c]));
+  const doCarro = (d) => !fc || (fc.startsWith('placa:') ? !d.carro_id && d.placa === fc.slice(6) : d.carro_id === fc);
   const vis = docs.filter((d) => {
-    const c = mapa.get(d.carro_id);
-    return (!fc || d.carro_id === fc) && (!ft || d.tipo === ft)
+    const c = carroDoDoc(d, mapa);
+    return doCarro(d) && (!ft || d.tipo === ft)
       && (!termo || `${c?.modelo || ''} ${c?.placa || ''} ${d.tipo}`.toLowerCase().includes(termo));
   }).sort((x, y) => {
-    const cx = mapa.get(x.carro_id), cy = mapa.get(y.carro_id);
+    const cx = carroDoDoc(x, mapa), cy = carroDoDoc(y, mapa);
     return (cx && cy ? porModelo(cx, cy) : 0) || x.tipo.localeCompare(y.tipo);
   });
   $('resumo-docs').textContent = docsErro ? '' : `${vis.length} de ${docs.length} documento(s)`;
   const corpo = $('lista-docs');
   corpo.replaceChildren();
   if (!vis.length) {
-    const msg = docsErro ? '' : !carros.length ? 'Cadastre um carro na aba Frota para anexar documentos.' : docs.length ? 'Nenhum documento com esse filtro.' : 'Nenhum documento cadastrado ainda.';
+    const msg = docsErro ? '' : docs.length ? 'Nenhum documento com esse filtro.' : 'Nenhum documento cadastrado ainda.';
     corpo.append(el('tr', {}, el('td', { colSpan: 6, className: 'vazio', textContent: msg })));
     return;
   }
   for (const d of vis) {
-    const c = mapa.get(d.carro_id);
+    const c = carroDoDoc(d, mapa);
     let abrir;
     if (d.tipo === TIPO_FOTOS) {
       abrir = el('button', { className: 'link', textContent: `Ver fotos (${fotosDoc(d).length})` });
@@ -737,7 +754,7 @@ function desenharDocs() {
     const tipo = el('td', { className: 'doc-nome' }, el('strong', { textContent: d.tipo }));
     if (d.descricao) tipo.append(el('span', { className: 'doc-desc', textContent: d.descricao })); // documentos antigos
     corpo.append(el('tr', { className: 'linha-doc' },
-      el('td', { className: 'doc-carro', textContent: c?.modelo || 'Carro removido' }),
+      el('td', { className: 'doc-carro', textContent: c?.modelo || 'Carro removido' }, ...(c?.naoCadastrado ? [el('span', { className: 'doc-desc', textContent: 'não cadastrado' })] : [])),
       el('td', { className: 'doc-placa', textContent: c?.placa || '—' }),
       tipo,
       rotulo(celulaFim(d.validade), 'Validade'),
@@ -803,7 +820,12 @@ async function abrirFormDoc(d = null) {
   $('titulo-doc').textContent = d ? 'Editar documento' : 'Novo documento';
   const f = $('form-doc');
   const porCarro = [...carros].sort(porModelo);
-  preencherSelect($('doc-carro'), porCarro.map((c) => [c.id, nomeCarro(c)]), d?.carro_id || $('filtro-carro').value);
+  const filtro = $('filtro-carro').value;
+  const semCad = filtro.startsWith('placa:') ? docs.find((x) => !x.carro_id && x.placa === filtro.slice(6)) : null;
+  const inicial = d ? d.carro_id || '__novo' : semCad ? '__novo' : filtro || porCarro[0]?.id || '__novo';
+  preencherSelect($('doc-carro'), [...porCarro.map((c) => [c.id, nomeCarro(c)]), ['__novo', 'Outro carro (não cadastrado)']], inicial);
+  f.modelo_doc.value = d && !d.carro_id ? d.modelo || '' : semCad?.modelo || '';
+  f.placa_doc.value = d && !d.carro_id ? d.placa || '' : semCad?.placa || '';
   // documento antigo com um tipo que saiu da lista (ex.: "Outro") continua editável sem perder o tipo
   const tipos = d && !TIPOS_DOC.includes(d.tipo) ? [...TIPOS_DOC, d.tipo] : TIPOS_DOC;
   preencherSelect($('doc-tipo'), tipos.map((t) => [t, t]), d?.tipo);
@@ -829,6 +851,7 @@ function atualizarFormDoc() {
   const tipo = $('doc-tipo').value;
   const video = tipo === TIPO_VIDEO;
   const fotos = tipo === TIPO_FOTOS;
+  $('bloco-carro-novo').hidden = $('doc-carro').value !== '__novo';
   $('rotulo-arquivo').hidden = video || fotos;
   $('bloco-fotos-doc').hidden = !fotos;
   $('bloco-video').hidden = !(video && usaDrive);
@@ -837,6 +860,7 @@ function atualizarFormDoc() {
   $('doc-atual').hidden = video || fotos || !$('doc-atual').textContent;
 }
 $('doc-tipo').onchange = atualizarFormDoc;
+$('doc-carro').onchange = atualizarFormDoc;
 $('novo-doc').onclick = () => abrirFormDoc();
 $('doc-cancelar').onclick = () => $('dialogo-doc').close();
 
@@ -860,7 +884,9 @@ $('form-doc').onsubmit = async (ev) => {
   ev.preventDefault();
   const f = ev.target;
   const erro = (m) => { $('erro-doc').textContent = m; };
-  const carro_id = f.carro_id.value;
+  let carro_id = f.carro_id.value;
+  let modeloDoc = null;
+  let placaDoc = null;
   const tipo = f.tipo.value;
   const validade = f.validade.value || null;
   const ehVideo = tipo === TIPO_VIDEO;
@@ -868,7 +894,15 @@ $('form-doc').onsubmit = async (ev) => {
   const link = f.link.value.trim();
   const arq = ehVideo || ehFotos ? null : f.arquivo.files[0] || null;
   const video = ehVideo && usaDrive ? f.video.files[0] || null : null;
-  if (!carro_id) return erro('Escolha o carro.');
+  if (carro_id === '__novo') { // carro que não está na Frota: o documento guarda o modelo e a placa
+    modeloDoc = f.modelo_doc.value.trim();
+    placaDoc = f.placa_doc.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (!modeloDoc) return erro('Informe o modelo do carro.');
+    if (!PLACA_RE.test(placaDoc)) return erro('Placa inválida (ex.: ABC1D23 ou ABC1234).');
+    const jaCadastrado = carros.find((c) => c.placa === placaDoc);
+    if (jaCadastrado) { carro_id = jaCadastrado.id; modeloDoc = null; placaDoc = null; } // já está na Frota: usa o cadastro
+    else carro_id = null;
+  }
   if (ehFotos) {
     if (!fotosDocAtuais.length && !fotosDocNovas.length) return erro('Escolha pelo menos uma foto.');
   } else if (ehVideo && video) {
@@ -887,12 +921,12 @@ $('form-doc').onsubmit = async (ev) => {
   $('doc-salvar').disabled = true;
   try {
     // "descricao" e "locatario" não são mais preenchidos aqui: ficam de fora para não apagar os de documentos antigos
-    const campos = { carro_id, tipo, validade, link: ehVideo ? link : null, drive_id: null, fotos: [] };
+    const campos = { carro_id, modelo: modeloDoc, placa: placaDoc, tipo, validade, link: ehVideo ? link : null, drive_id: null, fotos: [] };
     if (ehVideo && video) {
       const carro = carros.find((c) => c.id === carro_id);
       const barra = $('video-progresso');
       barra.hidden = false; barra.value = 0;
-      driveNovo = await enviarVideoDrive(video, `${carro?.placa || 'carro'} - ${tipo} - ${video.name}`, (pct) => {
+      driveNovo = await enviarVideoDrive(video, `${carro?.placa || placaDoc || 'carro'} - ${tipo} - ${video.name}`, (pct) => {
         barra.value = pct;
         $('doc-salvar').textContent = pct < 100 ? `Enviando vídeo… ${pct}%` : 'Finalizando…';
       });
