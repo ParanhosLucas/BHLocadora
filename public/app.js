@@ -682,7 +682,7 @@ function desenharLembrete() {
 const fotosDoc = (d) => d.fotos || [];
 const arquivosDoDoc = (d) => [d.arquivo, ...fotosDoc(d)].filter(Boolean);
 // tipos fixos + tipos antigos que ainda existam nos dados (ex.: "Outro", que foi retirado do formulário)
-const tiposDoFiltro = () => [...new Set([...TIPOS_DOC, ...docs.map((d) => d.tipo)])];
+const tiposDoFiltro = () => [...new Set([...TIPOS_DOC, ...docs.map((d) => d.tipo)])].filter((t) => t !== TIPO_VIDEO); // vídeo não é opção de filtro
 
 function desenharDocs() {
   desenharLembrete();
