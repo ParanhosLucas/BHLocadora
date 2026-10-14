@@ -152,3 +152,16 @@ alter table public.documentos add constraint documentos_tem_carro
   check (carro_id is not null or (placa is not null and modelo is not null));
 
 notify pgrst, 'reload schema';
+
+-- ===== Documentos independentes da Frota =====
+-- Documentos antigos que apontavam para um carro da Frota passam a guardar o próprio modelo e placa.
+-- Assim, excluir um carro da Frota não apaga mais os documentos dele. Os vídeos enviados pelo cadastro
+-- do carro continuam presos ao carro (e saem junto com ele, junto com o arquivo no Google Drive).
+update public.documentos d
+set modelo = c.modelo, placa = c.placa, carro_id = null
+from public.carros c
+where d.carro_id = c.id
+  and d.tipo not in ('Vídeo', 'Vídeo (link)')
+  and d.placa is null;
+
+notify pgrst, 'reload schema';

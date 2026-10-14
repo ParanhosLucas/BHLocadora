@@ -83,16 +83,6 @@ const dados = {
     const { error } = await q;
     if (error) throw error;
   },
-  // Documento de carro que ainda não estava na Frota: quando o carro é cadastrado, os documentos com a mesma placa passam a apontar para ele.
-  async vincularDocumentos(placa, carroId) {
-    if (demo) {
-      const l = lerDemoDocs();
-      l.forEach((d) => { if (!d.carro_id && d.placa === placa) Object.assign(d, { carro_id: carroId, modelo: null, placa: null }); });
-      return gravarDemoDocs(l);
-    }
-    const { error } = await sb.from('documentos').update({ carro_id: carroId, modelo: null, placa: null }).is('carro_id', null).eq('placa', placa);
-    if (error) throw error;
-  },
   async excluirDocumento(id) {
     if (demo) return gravarDemoDocs(lerDemoDocs().filter((x) => x.id !== id));
     const { error } = await sb.from('documentos').delete().eq('id', id);
@@ -267,6 +257,9 @@ function celulaFoto(c) {
   return el('td', { className: 'foto-celula' }, b);
 }
 
+// Vídeos enviados pelo cadastro do carro: vivem na Frota, fora da aba Documentos.
+const videosDoCarro = (c) => docs.filter((d) => d.carro_id === c.id && d.tipo === TIPO_VIDEO && d.link);
+
 function desenhar() {
   const termo = $('busca').value.trim().toLowerCase().replace(/[^a-z0-9 ]/g, '');
   const vis = carros.filter((c) => !termo || `${c.placa} ${c.modelo}`.toLowerCase().includes(termo));
@@ -274,7 +267,7 @@ function desenhar() {
   const corpo = $('lista');
   corpo.replaceChildren();
   if (!vis.length) {
-    corpo.append(el('tr', {}, el('td', { colSpan: 8, className: 'vazio', textContent: carros.length ? 'Nenhum carro encontrado.' : 'Nenhum carro cadastrado ainda.' })));
+    corpo.append(el('tr', {}, el('td', { colSpan: 9, className: 'vazio', textContent: carros.length ? 'Nenhum carro encontrado.' : 'Nenhum carro cadastrado ainda.' })));
     return;
   }
   for (const c of vis) {
@@ -287,14 +280,17 @@ function desenhar() {
     } else contrato = el('span', { textContent: '—' });
     const editar = el('button', { className: 'link', textContent: 'Editar' });
     editar.onclick = () => abrirForm(c);
-    const qtdDocs = docs.filter((d) => d.carro_id === c.id).length;
-    const verDocs = el('button', { className: 'link', textContent: qtdDocs ? `Documentos (${qtdDocs})` : 'Documentos' });
-    verDocs.onclick = () => irParaDocs(c.id);
+    const videos = videosDoCarro(c);
+    const celulaVideo = el('td', {});
+    if (!videos.length) celulaVideo.append('—');
+    videos.forEach((v, i) => celulaVideo.append(el('a', { href: v.link, target: '_blank', rel: 'noopener noreferrer', textContent: videos.length > 1 ? `Assistir ${i + 1}` : 'Assistir' })));
     const excluir = el('button', { className: 'perigo', textContent: 'Excluir' });
     excluir.onclick = async () => {
-      const videosDrive = docs.filter((d) => d.carro_id === c.id && d.drive_id);
-      const aviso = (qtdDocs ? `\n\nOs ${qtdDocs} documento(s) deste carro também serão apagados.` : '')
-        + (videosDrive.length ? `\n\n${videosDrive.length} vídeo(s) também serão apagados do seu Google Drive.` : '');
+      const videosDrive = videos.filter((d) => d.drive_id);
+      // documentos antigos ainda presos ao carro (antes do SQL que os torna independentes) sumiriam junto com ele
+      const presos = docs.filter((d) => d.carro_id === c.id && d.tipo !== TIPO_VIDEO).length;
+      const aviso = (videosDrive.length ? `\n\n${videosDrive.length} vídeo(s) também serão apagados do seu Google Drive.` : '')
+        + (presos ? `\n\n${presos} documento(s) antigo(s) ligado(s) a este carro também serão apagados.` : '');
       if (!confirm(`Excluir ${c.modelo} (${c.placa})?${aviso}`)) return;
       const arquivosDocs = docs.filter((d) => d.carro_id === c.id).flatMap(arquivosDoDoc);
       try {
@@ -314,7 +310,8 @@ function desenhar() {
       rotulo(el('td', { textContent: fmtData(c.contrato_inicio) }), 'Início'),
       rotulo(celulaFim(c.contrato_fim), 'Término'),
       rotulo(el('td', {}, contrato), 'Contrato'),
-      el('td', { className: 'acoes-linha' }, verDocs, editar, excluir)));
+      rotulo(celulaVideo, 'Vídeo'),
+      el('td', { className: 'acoes-linha' }, editar, excluir)));
   }
 }
 
@@ -330,6 +327,7 @@ async function recarregar() {
   catch (e) { docs = []; docsErro = /documentos/i.test(e?.message || '') ? 'A seção de documentos ainda não foi criada no Supabase. Rode o SQL de criação (veja o README) e recarregue a página.' : erroAmigavel(e); }
   desenhar();
   desenharDocs();
+  desenharLembrete();
 }
 
 // ---------- Galeria ----------
@@ -413,6 +411,31 @@ $('fotos-input').onchange = (ev) => {
   if (erro.length) $('erro-form').textContent = erro.join(' ');
 };
 
+// Lista os vídeos do carro dentro do formulário, com Assistir e Apagar.
+function desenharVideosDoCarro(c) {
+  const caixa = $('videos-existentes');
+  const videos = c ? videosDoCarro(c) : [];
+  caixa.replaceChildren();
+  caixa.hidden = !videos.length;
+  if (!videos.length) return;
+  caixa.append(el('span', { className: 'rotulo', textContent: `Vídeos deste carro (${videos.length}) — enviar outro adiciona mais um` }));
+  videos.forEach((v, i) => {
+    const ver = el('a', { href: v.link, target: '_blank', rel: 'noopener noreferrer', textContent: 'Assistir' });
+    const apagar = el('button', { type: 'button', className: 'perigo', textContent: v.drive_id ? 'Apagar do Drive' : 'Remover' });
+    apagar.onclick = async () => {
+      const msg = v.drive_id ? `Apagar o vídeo ${i + 1} do seu Google Drive e do site?\n\nIsso não pode ser desfeito.` : `Remover o link do vídeo ${i + 1} do site?`;
+      if (!confirm(msg)) return;
+      try {
+        if (v.drive_id && !(await apagarVideoDoDrive(v.drive_id))) return;
+        await dados.excluirDocumento(v.id);
+        await recarregar();
+        desenharVideosDoCarro(c);
+      } catch (e) { $('erro-form').textContent = erroAmigavel(e); }
+    };
+    caixa.append(el('div', { className: 'video-item' }, el('span', { textContent: `Vídeo ${i + 1}` }), ver, apagar));
+  });
+}
+
 async function abrirForm(c = null) {
   editando = c;
   $('titulo-form').textContent = c ? 'Editar carro' : 'Novo carro';
@@ -437,9 +460,7 @@ async function abrirForm(c = null) {
   f.video.value = '';
   $('carro-video-progresso').hidden = true;
   $('bloco-video-carro').hidden = !usaDrive;
-  const nVideos = c ? docs.filter((d) => d.carro_id === c.id && d.tipo === TIPO_VIDEO).length : 0;
-  $('videos-existentes').textContent = nVideos ? `Este carro já tem ${nVideos} vídeo(s) (veja na aba Documentos). Enviar outro adiciona mais um.` : '';
-  $('videos-existentes').hidden = !nVideos;
+  desenharVideosDoCarro(c);
   atualizarEstadoGoogle();
   desenharFotosForm();
   $('dialogo').showModal();
@@ -511,7 +532,6 @@ $('form-carro').onsubmit = async (ev) => {
     }
     await dados.salvar(editando?.id, editando ? campos : { id: idCarro, ...campos });
     carroSalvo = true;
-    if (!editando) await dados.vincularDocumentos(placa, idCarro).catch(() => {}); // melhor esforço
     if (driveNovo) {
       try {
         await dados.salvarDocumento(null, { carro_id: idCarro, tipo: TIPO_VIDEO, descricao: null, validade: null, arquivo: null, nome_arquivo: null,
@@ -680,8 +700,8 @@ function videosParaApagar() {
 }
 function desenharLembrete() {
   const lista = docsErro ? [] : videosParaApagar();
-  const aba = document.querySelector('.aba[data-aba=docs]');
-  aba.replaceChildren('Documentos', ...(lista.length ? [el('span', { className: 'contagem', textContent: String(lista.length), title: 'Vídeos para apagar' })] : []));
+  const aba = document.querySelector('.aba[data-aba=frota]');
+  aba.replaceChildren('Frota', ...(lista.length ? [el('span', { className: 'contagem', textContent: String(lista.length), title: 'Vídeos para apagar' })] : []));
   const caixa = $('lembrete-videos');
   caixa.hidden = !lista.length;
   caixa.replaceChildren();
@@ -710,28 +730,28 @@ function desenharLembrete() {
   }
 }
 
-// Documento de carro cadastrado usa o cadastro; senão usa o modelo e a placa digitados no próprio documento.
-const carroDoDoc = (d, mapa) => mapa.get(d.carro_id) || (d.placa ? { modelo: d.modelo || '', placa: d.placa, naoCadastrado: true } : null);
+// Cada documento guarda o próprio modelo e a placa. Só documentos antigos, que ainda apontam para um carro
+// da Frota, usam o cadastro dele (o SQL de independência os converte).
+const carroDoDoc = (d, mapa) => (d.placa ? { modelo: d.modelo || '', placa: d.placa } : mapa.get(d.carro_id) || null);
+// A aba mostra tudo, menos os vídeos que pertencem a carros da Frota.
+const docsDaAba = () => docs.filter((d) => !(d.carro_id && d.tipo === TIPO_VIDEO));
 const fotosDoc = (d) => d.fotos || [];
 const arquivosDoDoc = (d) => [d.arquivo, ...fotosDoc(d)].filter(Boolean);
 // tipos fixos + tipos antigos que ainda existam nos dados (ex.: "Outro", que foi retirado do formulário)
-const tiposDoFiltro = () => [...new Set([...TIPOS_DOC, ...docs.map((d) => d.tipo)])].filter((t) => t !== TIPO_VIDEO); // vídeo não é opção de filtro
+const tiposDoFiltro = () => [...new Set([...TIPOS_DOC, ...docsDaAba().map((d) => d.tipo)])].filter((t) => t !== TIPO_VIDEO); // vídeo não é opção de filtro
 
 function desenharDocs() {
-  desenharLembrete();
-  const porCarro = [...carros].sort(porModelo);
-  const semCadastro = [...new Map(docs.filter((d) => !d.carro_id && d.placa).map((d) => [d.placa, d])).values()]
-    .sort((x, y) => (x.modelo || '').localeCompare(y.modelo || ''));
-  preencherSelect($('filtro-carro'), [['', 'Todos os carros'], ...porCarro.map((c) => [c.id, nomeCarro(c)]),
-    ...semCadastro.map((d) => [`placa:${d.placa}`, `${d.modelo} · ${d.placa} (não cadastrado)`])], $('filtro-carro').value);
+  const lista = docsDaAba();
+  const mapa = new Map(carros.map((c) => [c.id, c]));
+  const carrosDosDocs = [...new Map(lista.map((d) => carroDoDoc(d, mapa)).filter(Boolean).map((c) => [c.placa, c])).values()].sort(porModelo);
+  preencherSelect($('filtro-carro'), [['', 'Todos os carros'], ...carrosDosDocs.map((c) => [`placa:${c.placa}`, nomeCarro(c)])], $('filtro-carro').value);
   preencherSelect($('filtro-tipo'), [['', 'Todos os tipos'], ...tiposDoFiltro().map((t) => [t, t])], $('filtro-tipo').value);
   $('erro-docs').textContent = docsErro;
   $('novo-doc').disabled = !!docsErro;
   const fc = $('filtro-carro').value, ft = $('filtro-tipo').value;
   const termo = $('busca-doc').value.trim().toLowerCase();
-  const mapa = new Map(carros.map((c) => [c.id, c]));
-  const doCarro = (d) => !fc || (fc.startsWith('placa:') ? !d.carro_id && d.placa === fc.slice(6) : d.carro_id === fc);
-  const vis = docs.filter((d) => {
+  const doCarro = (d) => !fc || carroDoDoc(d, mapa)?.placa === fc.slice(6);
+  const vis = lista.filter((d) => {
     const c = carroDoDoc(d, mapa);
     return doCarro(d) && (!ft || d.tipo === ft)
       && (!termo || `${c?.modelo || ''} ${c?.placa || ''} ${d.tipo}`.toLowerCase().includes(termo));
@@ -739,11 +759,11 @@ function desenharDocs() {
     const cx = carroDoDoc(x, mapa), cy = carroDoDoc(y, mapa);
     return (cx && cy ? porModelo(cx, cy) : 0) || x.tipo.localeCompare(y.tipo);
   });
-  $('resumo-docs').textContent = docsErro ? '' : `${vis.length} de ${docs.length} documento(s)`;
+  $('resumo-docs').textContent = docsErro ? '' : `${vis.length} de ${lista.length} documento(s)`;
   const corpo = $('lista-docs');
   corpo.replaceChildren();
   if (!vis.length) {
-    const msg = docsErro ? '' : docs.length ? 'Nenhum documento com esse filtro.' : 'Nenhum documento cadastrado ainda.';
+    const msg = docsErro ? '' : lista.length ? 'Nenhum documento com esse filtro.' : 'Nenhum documento cadastrado ainda.';
     corpo.append(el('tr', {}, el('td', { colSpan: 5, className: 'vazio', textContent: msg })));
     return;
   }
@@ -778,7 +798,7 @@ function desenharDocs() {
     const tipo = el('td', { className: 'doc-nome' }, el('strong', { textContent: d.tipo }));
     if (d.descricao) tipo.append(el('span', { className: 'doc-desc', textContent: d.descricao })); // documentos antigos
     corpo.append(el('tr', { className: 'linha-doc' },
-      el('td', { className: 'doc-carro', textContent: c?.modelo || 'Carro removido' }, ...(c?.naoCadastrado ? [el('span', { className: 'doc-desc', textContent: 'não cadastrado' })] : [])),
+      el('td', { className: 'doc-carro', textContent: c?.modelo || '—' }),
       el('td', { className: 'doc-placa', textContent: c?.placa || '—' }),
       tipo,
       rotulo(el('td', { className: 'doc-acoes-arquivo' }, ...abrir), d.tipo === TIPO_VIDEO ? 'Vídeo' : d.tipo === TIPO_FOTOS ? 'Fotos' : TIPOS_DOC.includes(d.tipo) ? 'CRLV' : 'Arquivo'),
@@ -788,12 +808,6 @@ function desenharDocs() {
 $('filtro-carro').onchange = desenharDocs;
 $('filtro-tipo').onchange = desenharDocs;
 $('busca-doc').oninput = desenharDocs;
-
-function irParaDocs(carroId) {
-  mostrarAba('docs');
-  $('filtro-carro').value = carroId;
-  desenharDocs();
-}
 
 // ----- fotos de um documento do tipo "Fotos" -----
 let editandoDoc = null;
@@ -844,8 +858,9 @@ async function abrirFormDoc(d = null) {
   const f = $('form-doc');
   // Modelo e placa são sempre digitados. Ao editar, ou ao abrir com um carro filtrado, já vêm preenchidos.
   const filtro = $('filtro-carro').value;
-  const origem = d ? carros.find((c) => c.id === d.carro_id) || d
-    : carros.find((c) => c.id === filtro) || (filtro.startsWith('placa:') ? docs.find((x) => !x.carro_id && x.placa === filtro.slice(6)) : null);
+  const mapa = new Map(carros.map((c) => [c.id, c]));
+  const origem = d ? carroDoDoc(d, mapa)
+    : filtro ? docsDaAba().map((x) => carroDoDoc(x, mapa)).find((c) => c?.placa === filtro.slice(6)) : null;
   f.modelo_doc.value = origem?.modelo || '';
   f.placa_doc.value = origem?.placa || '';
   // documento antigo com um tipo que saiu da lista (ex.: "Outro") continua editável sem perder o tipo
@@ -914,8 +929,6 @@ $('form-doc').onsubmit = async (ev) => {
   const video = ehVideo && usaDrive ? f.video.files[0] || null : null;
   if (!modeloDoc) return erro('Informe o modelo do carro.');
   if (!PLACA_RE.test(placaDoc)) return erro('Placa inválida (ex.: ABC1D23 ou ABC1234).');
-  const jaCadastrado = carros.find((c) => c.placa === placaDoc);
-  if (jaCadastrado) { carro_id = jaCadastrado.id; modeloDoc = null; placaDoc = null; } // já está na Frota: usa o cadastro
   if (ehFotos) {
     if (!fotosDocAtuais.length && !fotosDocNovas.length) return erro('Escolha pelo menos uma foto.');
   } else if (ehVideo && video) {

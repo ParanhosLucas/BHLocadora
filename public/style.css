@@ -178,3 +178,11 @@ progress { width: 100%; height: 10px; accent-color: var(--marca); }
 /* botões Exibir / Baixar lado a lado */
 td.doc-acoes-arquivo > * + * { margin-left: 2px; }
 .doc-carro .doc-desc { font-weight: 400; font-size: .8rem; }
+
+/* vídeos do carro dentro do formulário da Frota */
+.videos-lista { margin: 8px 0; }
+.video-item { display: flex; align-items: center; gap: 12px; padding: 6px 0; border-top: 1px solid var(--borda); font-size: .9rem; }
+.video-item > span { flex: 1; color: var(--suave); }
+.video-item button { padding: 4px 8px; }
+td a { white-space: nowrap; }
+td a + a { margin-left: 8px; }
