@@ -54,7 +54,7 @@ create policy "contratos: somente logados" on storage.objects
 
 notify pgrst, 'reload schema';
 
--- Fotos do carro: lista de caminhos dos arquivos (até 6 por carro, controlado pelo site).
+-- Fotos do carro: lista de caminhos dos arquivos (até 8 por carro, controlado pelo site).
 alter table public.carros add column if not exists fotos text[] not null default '{}';
 
 -- Espaço de armazenamento PRIVADO para fotos (o site reduz cada foto para JPEG antes de enviar).

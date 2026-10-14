@@ -5,7 +5,7 @@ const PLACA_RE = /^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/;
 const B_PDF = 'contratos';
 const B_FOTOS = 'fotos';
 const MAX_PDF = 10 * 1024 * 1024; // 10 MB, igual ao limite do bucket
-const MAX_FOTOS = 6;              // fotos por carro
+const MAX_FOTOS = 8;              // fotos por carro
 const MAX_FOTO_ORIGINAL = 30 * 1024 * 1024; // limite do arquivo escolhido, antes de reduzir
 const LADO_MAX = 1600;            // px do maior lado depois de reduzir
 
