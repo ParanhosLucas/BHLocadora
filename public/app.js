@@ -741,7 +741,7 @@ function desenharDocs() {
       el('td', { className: 'doc-placa', textContent: c?.placa || '—' }),
       tipo,
       rotulo(celulaFim(d.validade), 'Validade'),
-      rotulo(el('td', {}, abrir), d.tipo === TIPO_VIDEO ? 'Vídeo' : d.tipo === TIPO_FOTOS ? 'Fotos' : 'Arquivo'),
+      rotulo(el('td', {}, abrir), d.tipo === TIPO_VIDEO ? 'Vídeo' : d.tipo === TIPO_FOTOS ? 'Fotos' : TIPOS_DOC.includes(d.tipo) ? 'CRLV' : 'Arquivo'),
       el('td', { className: 'acoes-linha' }, editar, excluir)));
   }
 }
