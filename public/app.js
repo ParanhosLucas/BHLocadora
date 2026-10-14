@@ -99,12 +99,12 @@ const dados = {
     }
     return caminho;
   },
-  // Link temporário que força o download (o Storage responde com "Content-Disposition: attachment").
-  async urlDownload(bucket, caminho, nome) {
-    if (demo) { const f = arquivosDemo.get(caminho); return f ? URL.createObjectURL(f) : null; }
-    const { data, error } = await sb.storage.from(bucket).createSignedUrl(caminho, 300, { download: nome });
+  // Baixa o arquivo para dentro do app (como Blob), usando o login: serve para entregar ao navegador como arquivo a salvar.
+  async obterArquivo(bucket, caminho) {
+    if (demo) return arquivosDemo.get(caminho) || null;
+    const { data, error } = await sb.storage.from(bucket).download(caminho);
     if (error) throw error;
-    return data.signedUrl;
+    return data;
   },
   async removerArquivos(bucket, caminhos) {
     if (!caminhos.length) return;
@@ -228,20 +228,19 @@ async function abrirArquivo(bucket, caminho) {
 
 const abrirPdf = (caminho) => abrirArquivo(B_PDF, caminho);
 
+const TIPOS_POR_EXTENSAO = { pdf: 'application/pdf', jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png' };
 async function baixarArquivo(bucket, caminho, nome) {
   try {
-    const url = await dados.urlDownload(bucket, caminho, nome);
-    if (!url) throw new Error('Não foi possível baixar o arquivo. No modo demonstração ele só fica disponível até recarregar a página.');
-    if (url.startsWith('blob:')) { // modo demonstração: arquivo local
-      const a = el('a', { href: url, download: nome, rel: 'noopener' });
-      document.body.append(a);
-      a.click();
-      a.remove();
-    } else {
-      // O link do Storage já responde como anexo ("Content-Disposition: attachment"). Navegar até ele baixa o arquivo
-      // sem sair da página e funciona no celular; um clique programático depois de esperar a rede é bloqueado pelo Safari do iPhone.
-      window.location.assign(url);
-    }
+    const bruto = await dados.obterArquivo(bucket, caminho);
+    if (!bruto) throw new Error('Não foi possível baixar o arquivo. No modo demonstração ele só fica disponível até recarregar a página.');
+    // o tipo certo faz o navegador tratar como arquivo (o Safari do iPhone abre na tela quando o tipo vem vazio ou genérico)
+    const tipo = TIPOS_POR_EXTENSAO[nome.split('.').pop().toLowerCase()] || bruto.type || 'application/octet-stream';
+    const url = URL.createObjectURL(new Blob([bruto], { type: tipo }));
+    const a = el('a', { href: url, download: nome, rel: 'noopener' });
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
   } catch (e) { alert(erroAmigavel(e)); }
 }
 // Nome do arquivo baixado: o original, com a extensão do que foi guardado (foto vira .jpg ao enviar).
