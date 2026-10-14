@@ -31,3 +31,25 @@ alter table public.carros
 alter table public.carros drop constraint if exists carros_datas_validas;
 alter table public.carros add constraint carros_datas_validas
   check (contrato_inicio is null or contrato_fim is null or contrato_fim >= contrato_inicio);
+
+-- Contrato em PDF: guarda o caminho do arquivo e o nome original.
+alter table public.carros
+  add column if not exists contrato_arquivo text,
+  add column if not exists contrato_nome    text;
+
+-- Espaço de armazenamento PRIVADO só para PDFs de até 10 MB.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('contratos', 'contratos', false, 10485760, array['application/pdf'])
+on conflict (id) do update
+  set public = false,
+      file_size_limit = excluded.file_size_limit,
+      allowed_mime_types = excluded.allowed_mime_types;
+
+-- Só usuários logados leem, enviam e apagam arquivos desse espaço.
+drop policy if exists "contratos: somente logados" on storage.objects;
+create policy "contratos: somente logados" on storage.objects
+  for all to authenticated
+  using (bucket_id = 'contratos')
+  with check (bucket_id = 'contratos');
+
+notify pgrst, 'reload schema';

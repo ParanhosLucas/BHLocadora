@@ -57,11 +57,13 @@
         <label>Início do contrato <input name="contrato_inicio" type="date"></label>
         <label>Término do contrato <input name="contrato_fim" type="date"></label>
       </div>
-      <label>Link do contrato <input name="contrato_url" type="url" placeholder="https://drive.google.com/..."></label>
+      <label>Contrato em PDF (até 10 MB) <input name="contrato_pdf" type="file" accept="application/pdf,.pdf"></label>
+      <p id="pdf-atual" class="pdf-atual" hidden></p>
+      <label id="rotulo-remover" class="marcar" hidden><input name="remover_pdf" type="checkbox"> Remover o contrato atual</label>
       <p class="erro" id="erro-form" role="alert"></p>
       <div class="acoes">
         <button type="button" class="sec" id="cancelar">Cancelar</button>
-        <button type="submit">Salvar</button>
+        <button type="submit" id="salvar">Salvar</button>
       </div>
     </form>
   </dialog>

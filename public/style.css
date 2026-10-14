@@ -37,7 +37,7 @@ th { font-size: .78rem; letter-spacing: .06em; text-transform: uppercase; color:
 td.placa { font-family: ui-monospace, monospace; font-weight: 700; letter-spacing: .04em; }
 td.acoes-linha { text-align: right; }
 .vazio { text-align: center; color: var(--suave); padding: 28px; }
-dialog { border: 1px solid var(--borda); border-top: 3px solid var(--marca); border-radius: 12px; background: var(--card); color: var(--texto); width: min(420px, calc(100vw - 32px)); padding: 20px; }
+dialog { border: 1px solid var(--borda); border-top: 3px solid var(--marca); border-radius: 12px; background: var(--card); color: var(--texto); width: min(420px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow-y: auto; padding: 20px; }
 dialog::backdrop { background: rgba(0, 0, 0, .7); }
 dialog h2, .cartao h2 { margin: 0 0 4px; font-size: 1.1rem; }
 .cartao h2 { text-align: center; }
@@ -45,5 +45,10 @@ dialog h2, .cartao h2 { margin: 0 0 4px; font-size: 1.1rem; }
 .duas input { min-width: 0; color-scheme: dark; }
 .etiqueta { display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 999px; font-size: .75rem; font-weight: 600; background: var(--marca); color: var(--sobre-marca); }
 .etiqueta.vencido { background: var(--erro); }
+.pdf-atual { margin: -4px 0 8px; font-size: .8rem; color: var(--suave); overflow-wrap: anywhere; }
+label.marcar { display: flex; align-items: center; gap: 8px; color: var(--texto); }
+input[type=checkbox] { display: inline-block; width: auto; margin: 0; accent-color: var(--marca); }
+input[type=file] { color: var(--suave); }
+button:disabled { opacity: .6; cursor: wait; }
 .acoes { display: flex; justify-content: flex-end; gap: 8px; }
 @media (max-width: 480px) { .marca img { height: 52px; } }
