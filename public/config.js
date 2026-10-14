@@ -4,5 +4,5 @@
 // Deixando em branco, o site roda em modo demonstração (dados só neste navegador).
 window.CONFIG = {
   SUPABASE_URL: 'https://xehgxyetxcqcwtclpfrq.supabase.co',
-  SUPABASE_ANON_KEY: '',
+  SUPABASE_ANON_KEY: 'sb_publishable_XdlU9ZveOlmPxwslKBTTcw_WP4-dLSZ',
 };
