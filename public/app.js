@@ -5,8 +5,9 @@ const PLACA_RE = /^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/;
 const B_PDF = 'contratos';
 const B_FOTOS = 'fotos';
 const B_DOCS = 'documentos';
-const TIPOS_DOC = ['CRLV (documento do carro)', 'Seguro', 'IPVA', 'Licenciamento', 'Contrato de locação',
-  'Vistoria', 'Nota fiscal', 'Manutenção', 'Multa', 'Fotos', 'Vídeo'];
+// Só o CRLV pode ser escolhido para documentos novos. Documentos antigos de outros tipos (Seguro, Fotos,
+// Vídeo...) continuam na lista e podem ser editados; o vídeo continua sendo enviado pelo cadastro do carro.
+const TIPOS_DOC = ['CRLV (documento do carro)'];
 const TIPO_FOTOS = 'Fotos'; // várias fotos (até MAX_FOTOS) num único documento, só imagens
 const GOOGLE_ID = cfg.GOOGLE_CLIENT_ID || '';
 const usaDrive = !!GOOGLE_ID; // sem o ID do Google, o envio direto fica desligado
