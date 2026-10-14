@@ -627,15 +627,6 @@ async function apagarVideoDoDrive(id) {
   return confirm('O Google não encontrou este vídeo na conta conectada.\n\nEle pode já ter sido apagado, ou foi enviado por OUTRA conta Google (nesse caso, cancele, conecte com a conta certa e tente de novo).\n\nRemover só o registro do site, mesmo assim?');
 }
 
-function abrirPlayer(d, c) {
-  $('player-titulo').textContent = `${d.tipo} · ${nomeCarro(c)}`;
-  $('player-frame').src = `https://drive.google.com/file/d/${encodeURIComponent(d.drive_id)}/preview`;
-  $('player-drive').href = d.link;
-  $('player').showModal();
-}
-$('player').addEventListener('close', () => { $('player-frame').src = 'about:blank'; }); // para o som ao fechar
-$('player-fechar').onclick = () => $('player').close();
-
 // ---------- Documentos ----------
 const nomeCarro = (c) => (c ? `${c.placa} · ${c.modelo}` : 'Carro removido');
 
@@ -706,10 +697,7 @@ function desenharDocs() {
   for (const d of vis) {
     const c = mapa.get(d.carro_id);
     let abrir;
-    if (d.drive_id) {
-      abrir = el('button', { className: 'link', textContent: 'Assistir' });
-      abrir.onclick = () => abrirPlayer(d, c);
-    } else if (d.link) abrir = el('a', { href: d.link, target: '_blank', rel: 'noopener noreferrer', textContent: 'Assistir' });
+    if (d.link) abrir = el('a', { href: d.link, target: '_blank', rel: 'noopener noreferrer', textContent: 'Assistir' });
     else {
       abrir = el('button', { className: 'link', textContent: 'Abrir', title: d.nome_arquivo || '' });
       abrir.onclick = () => abrirArquivo(B_DOCS, d.arquivo);
