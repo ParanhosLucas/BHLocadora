@@ -174,3 +174,7 @@ progress { width: 100%; height: 10px; accent-color: var(--marca); }
 @media (max-width: 860px) {
   .barra.filtros input { flex: 1 1 100%; }
 }
+
+/* botões Exibir / Baixar lado a lado */
+td.doc-acoes-arquivo > * + * { margin-left: 2px; }
+.doc-carro .doc-desc { font-weight: 400; font-size: .8rem; }

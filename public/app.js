@@ -109,6 +109,13 @@ const dados = {
     }
     return caminho;
   },
+  // Link temporário que força o download (o Storage responde com "Content-Disposition: attachment").
+  async urlDownload(bucket, caminho, nome) {
+    if (demo) { const f = arquivosDemo.get(caminho); return f ? URL.createObjectURL(f) : null; }
+    const { data, error } = await sb.storage.from(bucket).createSignedUrl(caminho, 300, { download: nome });
+    if (error) throw error;
+    return data.signedUrl;
+  },
   async removerArquivos(bucket, caminhos) {
     if (!caminhos.length) return;
     if (demo) { caminhos.forEach((c) => arquivosDemo.delete(c)); return; }
@@ -230,6 +237,19 @@ async function abrirArquivo(bucket, caminho) {
 }
 
 const abrirPdf = (caminho) => abrirArquivo(B_PDF, caminho);
+
+async function baixarArquivo(bucket, caminho, nome) {
+  try {
+    const url = await dados.urlDownload(bucket, caminho, nome);
+    if (!url) throw new Error('Não foi possível baixar o arquivo. No modo demonstração ele só fica disponível até recarregar a página.');
+    const a = el('a', { href: url, download: nome, rel: 'noopener' });
+    document.body.append(a);
+    a.click();
+    a.remove();
+  } catch (e) { alert(erroAmigavel(e)); }
+}
+// Nome do arquivo baixado: o original, com a extensão do que foi guardado (foto vira .jpg ao enviar).
+const nomeDownload = (d) => `${(d.nome_arquivo || 'documento').replace(/\.[^./\\]+$/, '')}.${(d.arquivo || '').split('.').pop() || 'pdf'}`;
 
 function celulaFoto(c) {
   const fotos = fotosDe(c);
@@ -724,19 +744,23 @@ function desenharDocs() {
   corpo.replaceChildren();
   if (!vis.length) {
     const msg = docsErro ? '' : docs.length ? 'Nenhum documento com esse filtro.' : 'Nenhum documento cadastrado ainda.';
-    corpo.append(el('tr', {}, el('td', { colSpan: 6, className: 'vazio', textContent: msg })));
+    corpo.append(el('tr', {}, el('td', { colSpan: 5, className: 'vazio', textContent: msg })));
     return;
   }
   for (const d of vis) {
     const c = carroDoDoc(d, mapa);
-    let abrir;
+    const abrir = []; // botões da coluna CRLV
     if (d.tipo === TIPO_FOTOS) {
-      abrir = el('button', { className: 'link', textContent: `Ver fotos (${fotosDoc(d).length})` });
-      abrir.onclick = () => abrirGaleriaDe(nomeCarro(c), fotosDoc(d), B_DOCS);
-    } else if (d.link) abrir = el('a', { href: d.link, target: '_blank', rel: 'noopener noreferrer', textContent: 'Assistir' });
-    else {
-      abrir = el('button', { className: 'link', textContent: 'Abrir', title: d.nome_arquivo || '' });
-      abrir.onclick = () => abrirArquivo(B_DOCS, d.arquivo);
+      const ver = el('button', { className: 'link', textContent: `Ver fotos (${fotosDoc(d).length})` });
+      ver.onclick = () => abrirGaleriaDe(nomeCarro(c), fotosDoc(d), B_DOCS);
+      abrir.push(ver);
+    } else if (d.link) abrir.push(el('a', { href: d.link, target: '_blank', rel: 'noopener noreferrer', textContent: 'Assistir' }));
+    else if (d.arquivo) {
+      const exibir = el('button', { className: 'link', textContent: 'Exibir', title: d.nome_arquivo || '' });
+      exibir.onclick = () => abrirArquivo(B_DOCS, d.arquivo);
+      const baixar = el('button', { className: 'link', textContent: 'Baixar' });
+      baixar.onclick = () => baixarArquivo(B_DOCS, d.arquivo, nomeDownload(d));
+      abrir.push(exibir, baixar);
     }
     const editar = el('button', { className: 'link', textContent: 'Editar' });
     editar.onclick = () => abrirFormDoc(d);
@@ -757,8 +781,7 @@ function desenharDocs() {
       el('td', { className: 'doc-carro', textContent: c?.modelo || 'Carro removido' }, ...(c?.naoCadastrado ? [el('span', { className: 'doc-desc', textContent: 'não cadastrado' })] : [])),
       el('td', { className: 'doc-placa', textContent: c?.placa || '—' }),
       tipo,
-      rotulo(celulaFim(d.validade), 'Validade'),
-      rotulo(el('td', {}, abrir), d.tipo === TIPO_VIDEO ? 'Vídeo' : d.tipo === TIPO_FOTOS ? 'Fotos' : TIPOS_DOC.includes(d.tipo) ? 'CRLV' : 'Arquivo'),
+      rotulo(el('td', { className: 'doc-acoes-arquivo' }, ...abrir), d.tipo === TIPO_VIDEO ? 'Vídeo' : d.tipo === TIPO_FOTOS ? 'Fotos' : TIPOS_DOC.includes(d.tipo) ? 'CRLV' : 'Arquivo'),
       el('td', { className: 'acoes-linha' }, editar, excluir)));
   }
 }
@@ -829,7 +852,6 @@ async function abrirFormDoc(d = null) {
   // documento antigo com um tipo que saiu da lista (ex.: "Outro") continua editável sem perder o tipo
   const tipos = d && !TIPOS_DOC.includes(d.tipo) ? [...TIPOS_DOC, d.tipo] : TIPOS_DOC;
   preencherSelect($('doc-tipo'), tipos.map((t) => [t, t]), d?.tipo);
-  f.validade.value = d?.validade || '';
   f.arquivo.value = '';
   f.link.value = d?.link || ''; // o campo fica oculto quando o envio para o Drive está ligado; o valor é mantido
   f.video.value = '';
@@ -888,7 +910,6 @@ $('form-doc').onsubmit = async (ev) => {
   let modeloDoc = null;
   let placaDoc = null;
   const tipo = f.tipo.value;
-  const validade = f.validade.value || null;
   const ehVideo = tipo === TIPO_VIDEO;
   const ehFotos = tipo === TIPO_FOTOS;
   const link = f.link.value.trim();
@@ -921,7 +942,7 @@ $('form-doc').onsubmit = async (ev) => {
   $('doc-salvar').disabled = true;
   try {
     // "descricao" e "locatario" não são mais preenchidos aqui: ficam de fora para não apagar os de documentos antigos
-    const campos = { carro_id, modelo: modeloDoc, placa: placaDoc, tipo, validade, link: ehVideo ? link : null, drive_id: null, fotos: [] };
+    const campos = { carro_id, modelo: modeloDoc, placa: placaDoc, tipo, link: ehVideo ? link : null, drive_id: null, fotos: [] };
     if (ehVideo && video) {
       const carro = carros.find((c) => c.id === carro_id);
       const barra = $('video-progresso');
