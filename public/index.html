@@ -1,29 +1,66 @@
 <!doctype html>
-<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>BH Locadora</title><link rel="stylesheet" href="/style.css"></head>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BH Locadora</title>
+  <link rel="stylesheet" href="style.css">
+</head>
 <body>
-<header><h1>🚗 BH Locadora</h1><a href="/admin">Área administrativa →</a></header>
-<main>
-  <div class="toolbar"><h2>Nossa frota</h2></div>
-  <div id="lista" class="grid"></div>
-  <p id="vazio" class="vazio" hidden>Nenhum carro cadastrado ainda.</p>
-</main>
-<div id="lightbox"><img alt=""></div>
-<script src="/app.js"></script>
-<script>
-(async()=>{
-  const carros = await (await fetch('/api/carros')).json();
-  document.getElementById('vazio').hidden = carros.length>0;
-  document.getElementById('lista').innerHTML = carros.map(cartao).join('');
-  ligarLightbox();
-})();
-function cartao(c){
-  const f=c.fotos;
-  return `<article class="card">
-    ${f.length?`<img class="foto zoom" src="/fotos/${f[0]}" alt="${esc(c.modelo)}">`:`<div class="semfoto">Sem foto</div>`}
-    ${f.length>1?`<div class="thumbs" style="padding-top:8px">${f.slice(1).map(x=>`<img class="zoom" src="/fotos/${x}" alt="">`).join('')}</div>`:''}
-    <div class="info"><h3>${esc(c.modelo)}</h3><span class="mut">Ano ${c.ano}</span>
-    <span><span class="tag ${c.alugado?'alugado':''}">${c.alugado?'Alugado':'Disponível'}</span></span></div></article>`;
-}
-</script>
-</body></html>
+  <header class="topo">
+    <h1>BH Locadora</h1>
+    <button id="sair" class="link" hidden>Sair</button>
+  </header>
+
+  <div id="aviso-demo" class="aviso" hidden>
+    Modo demonstração: os dados ficam só neste navegador. Configure o Supabase em <code>public/config.js</code> para salvar de verdade.
+  </div>
+
+  <main>
+    <section id="tela-login" hidden>
+      <form id="form-login" class="cartao">
+        <h2>Entrar</h2>
+        <label>E-mail <input name="email" type="email" autocomplete="username" required></label>
+        <label>Senha <input name="senha" type="password" autocomplete="current-password" required></label>
+        <p class="erro" id="erro-login" role="alert"></p>
+        <button type="submit">Entrar</button>
+      </form>
+    </section>
+
+    <section id="tela-painel" hidden>
+      <div class="barra">
+        <input id="busca" type="search" placeholder="Buscar por placa ou modelo" aria-label="Buscar">
+        <button id="novo">+ Novo carro</button>
+      </div>
+      <p id="resumo" class="resumo"></p>
+      <div class="tabela-wrap">
+        <table>
+          <thead>
+            <tr><th>Placa</th><th>Modelo</th><th class="num">Km</th><th>Contrato</th><th></th></tr>
+          </thead>
+          <tbody id="lista"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="dialogo">
+    <form id="form-carro" method="dialog">
+      <h2 id="titulo-form">Novo carro</h2>
+      <label>Placa <input name="placa" required maxlength="8" placeholder="ABC1D23" autocapitalize="characters"></label>
+      <label>Modelo <input name="modelo" required maxlength="80" placeholder="Fiat Argo 1.0"></label>
+      <label>Km atual <input name="km" type="number" min="0" step="1" required inputmode="numeric"></label>
+      <label>Link do contrato <input name="contrato_url" type="url" placeholder="https://drive.google.com/..."></label>
+      <p class="erro" id="erro-form" role="alert"></p>
+      <div class="acoes">
+        <button type="button" class="sec" id="cancelar">Cancelar</button>
+        <button type="submit">Salvar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
