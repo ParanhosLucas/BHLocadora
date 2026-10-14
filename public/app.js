@@ -10,7 +10,9 @@ const TIPOS_DOC = ['CRLV (documento do carro)', 'Seguro', 'IPVA', 'Licenciamento
 const MAX_PDF = 10 * 1024 * 1024; // 10 MB, igual ao limite do bucket
 const MAX_FOTOS = 8;              // fotos por carro
 const MAX_FOTO_ORIGINAL = 30 * 1024 * 1024; // limite do arquivo escolhido, antes de reduzir
-const LADO_MAX = 1600;            // px do maior lado depois de reduzir
+const LADO_MAX = 1280;            // px do maior lado da foto depois de reduzir (~100 KB)
+const LADO_MINI = 320;            // miniatura da lista (~15 KB): a lista não baixa a foto inteira
+const QUALIDADE_MINI = 0.72;
 
 // ---------- Camada de dados: Supabase, ou localStorage/memória no modo demonstração ----------
 const sb = demo ? null : window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY);
@@ -82,8 +84,8 @@ const dados = {
     if (error) throw error;
   },
   // ----- arquivos (PDF e fotos), em espaços privados do Storage -----
-  async enviarArquivo(bucket, arquivo, ext, tipo) {
-    const caminho = `${crypto.randomUUID()}.${ext}`;
+  async enviarArquivo(bucket, arquivo, ext, tipo, caminhoFixo = null) {
+    const caminho = caminhoFixo || `${crypto.randomUUID()}.${ext}`;
     if (demo) { arquivosDemo.set(caminho, arquivo); return caminho; }
     const { error } = await sb.storage.from(bucket).upload(caminho, arquivo, { contentType: tipo, upsert: false });
     if (error) {
@@ -138,6 +140,43 @@ function celulaFim(d) {
   return td;
 }
 
+// A miniatura de "abc.jpg" é "abc_t.jpg", no mesmo espaço; não precisa de coluna no banco.
+const caminhoMini = (p) => p.replace(/\.jpg$/, '_t.jpg');
+const comMiniaturas = (caminhos) => caminhos.flatMap((p) => [p, caminhoMini(p)]);
+
+// Links temporários ficam guardados nesta aba por 50 min (valem 60): reabrir a lista não gera
+// links novos, e o navegador reaproveita as imagens que já baixou. Limpo ao sair.
+const CACHE_URLS = 'bhl_urls';
+const TTL_URLS = 50 * 60 * 1000;
+const lerCacheUrls = () => { try { return JSON.parse(sessionStorage.getItem(CACHE_URLS)) || {}; } catch { return {}; } };
+const limparCacheUrls = () => { try { sessionStorage.removeItem(CACHE_URLS); } catch { /* sem armazenamento */ } };
+async function urlsComCache(bucket, caminhos, usarCache = !demo) {
+  if (!usarCache) return dados.urlsArquivos(bucket, caminhos);
+  const agora = Date.now();
+  const cache = lerCacheUrls();
+  const mapa = new Map();
+  const faltam = [];
+  for (const p of caminhos) {
+    const e = cache[`${bucket}/${p}`];
+    if (e && e.ate > agora) mapa.set(p, e.url); else faltam.push(p);
+  }
+  if (faltam.length) {
+    const novos = await dados.urlsArquivos(bucket, faltam);
+    for (const [p, u] of novos) { mapa.set(p, u); cache[`${bucket}/${p}`] = { url: u, ate: agora + TTL_URLS }; }
+    for (const k of Object.keys(cache)) if (cache[k].ate <= agora) delete cache[k];
+    try { sessionStorage.setItem(CACHE_URLS, JSON.stringify(cache)); } catch { /* sem armazenamento */ }
+  }
+  return mapa;
+}
+
+// Mapa foto -> URL da miniatura; fotos antigas, sem miniatura, usam a foto inteira.
+async function urlsMiniaturas(fotos) {
+  const minis = await urlsComCache(B_FOTOS, fotos.map(caminhoMini));
+  const sem = fotos.filter((p) => !minis.get(caminhoMini(p)));
+  const inteiras = sem.length ? await urlsComCache(B_FOTOS, sem) : new Map();
+  return new Map(fotos.map((p) => [p, minis.get(caminhoMini(p)) || inteiras.get(p)]));
+}
+
 // Reduz a foto (celular costuma gerar 3–10 MB) e converte para JPEG, respeitando a rotação.
 async function reduzirFoto(arquivo, ladoMax = LADO_MAX, qualidade = 0.82) {
   let bmp;
@@ -181,7 +220,13 @@ function celulaFoto(c) {
   const fotos = fotosDe(c);
   const url = fotos.length && miniaturas.get(fotos[0]);
   if (!url) return el('td', { className: 'foto-celula' }, el('span', { className: 'sem-foto', textContent: fotos.length ? '…' : '—' }));
-  const b = el('button', { className: 'mini', title: `Ver ${fotos.length} foto(s)` }, el('img', { src: url, alt: `Foto de ${c.modelo} ${c.placa}` }));
+  const img = el('img', { src: url, alt: `Foto de ${c.modelo} ${c.placa}`, loading: 'lazy' });
+  // Foto antiga, sem miniatura: cai para a foto inteira (uma vez só).
+  img.onerror = async () => {
+    img.onerror = null;
+    try { const m = await urlsComCache(B_FOTOS, [fotos[0]]); if (m.get(fotos[0])) img.src = m.get(fotos[0]); } catch { /* fica sem foto */ }
+  };
+  const b = el('button', { className: 'mini', title: `Ver ${fotos.length} foto(s)` }, img);
   if (fotos.length > 1) b.append(el('span', { className: 'mais', textContent: `+${fotos.length - 1}` }));
   b.onclick = () => abrirGaleria(c);
   return el('td', { className: 'foto-celula' }, b);
@@ -219,7 +264,7 @@ function desenhar() {
         await dados.excluir(c.id);
         if (arquivosDocs.length) dados.removerArquivos(B_DOCS, arquivosDocs).catch(() => {});
         if (c.contrato_arquivo) dados.removerArquivos(B_PDF, [c.contrato_arquivo]).catch(() => {});
-        dados.removerArquivos(B_FOTOS, fotosDe(c)).catch(() => {});
+        dados.removerArquivos(B_FOTOS, comMiniaturas(fotosDe(c))).catch(() => {});
         await recarregar();
       } catch (e) { alert(erroAmigavel(e)); }
     };
@@ -238,7 +283,7 @@ function desenhar() {
 async function recarregar() {
   carros = await dados.listar();
   const primeiras = carros.map((c) => fotosDe(c)[0]).filter(Boolean);
-  try { miniaturas = await dados.urlsArquivos(B_FOTOS, primeiras); } catch { miniaturas = new Map(); }
+  try { miniaturas = await urlsMiniaturas(primeiras); } catch { miniaturas = new Map(); }
   // Documentos são opcionais aqui: se a tabela ainda não existe, a frota continua funcionando.
   try { docs = await dados.listarDocumentos(); docsErro = ''; }
   catch (e) { docs = []; docsErro = /documentos/i.test(e?.message || '') ? 'A seção de documentos ainda não foi criada no Supabase. Rode o SQL de criação (veja o README) e recarregue a página.' : erroAmigavel(e); }
@@ -257,7 +302,7 @@ function desenharGaleria() {
 async function abrirGaleria(c) {
   const fotos = fotosDe(c);
   try {
-    const mapa = await dados.urlsArquivos(B_FOTOS, fotos);
+    const mapa = await urlsComCache(B_FOTOS, fotos);
     galeria = { urls: fotos.map((f) => mapa.get(f)).filter(Boolean), i: 0 };
   } catch (e) { return alert(erroAmigavel(e)); }
   if (!galeria.urls.length) return alert('Não foi possível carregar as fotos.');
@@ -290,7 +335,14 @@ function desenharFotosForm() {
     x.onclick = aoRemover;
     return el('div', { className: 'foto-item' }, el('img', { src, alt }), x);
   };
-  fotosAtuais.forEach((p, i) => grade.append(item(urlsAtuais.get(p) || '', `foto ${i + 1}`, () => { fotosAtuais = fotosAtuais.filter((x) => x !== p); desenharFotosForm(); })));
+  fotosAtuais.forEach((p, i) => {
+    const it = item(urlsAtuais.get(p) || '', `foto ${i + 1}`, () => { fotosAtuais = fotosAtuais.filter((x) => x !== p); desenharFotosForm(); });
+    it.querySelector('img').onerror = async function () {
+      this.onerror = null;
+      try { const m = await urlsComCache(B_FOTOS, [p]); if (m.get(p)) this.src = m.get(p); } catch { /* fica sem foto */ }
+    };
+    grade.append(it);
+  });
   fotosNovas.forEach((f, i) => {
     const it = item(urlsNovas[i], f.name, () => { fotosNovas.splice(i, 1); desenharFotosForm(); });
     // arquivo que não abre como imagem (ex.: texto renomeado para .jpg) sai da lista na hora
@@ -344,7 +396,7 @@ async function abrirForm(c = null) {
   $('dialogo').showModal();
   f.placa.focus();
   if (fotosAtuais.length) {
-    try { urlsAtuais = await dados.urlsArquivos(B_FOTOS, fotosAtuais); desenharFotosForm(); } catch { /* miniaturas são opcionais */ }
+    try { urlsAtuais = await urlsMiniaturas(fotosAtuais); desenharFotosForm(); } catch { /* miniaturas são opcionais */ }
   }
 }
 
@@ -385,17 +437,21 @@ $('form-carro').onsubmit = async (ev) => {
     }
     for (const [i, arq] of fotosNovas.entries()) {
       $('salvar').textContent = `Enviando foto ${i + 1}/${fotosNovas.length}…`;
-      enviadas.push(await dados.enviarArquivo(B_FOTOS, await reduzirFoto(arq), 'jpg', 'image/jpeg'));
+      const grande = await reduzirFoto(arq);
+      const mini = await reduzirFoto(arq, LADO_MINI, QUALIDADE_MINI);
+      const caminho = await dados.enviarArquivo(B_FOTOS, grande, 'jpg', 'image/jpeg');
+      enviadas.push(caminho);
+      await dados.enviarArquivo(B_FOTOS, mini, 'jpg', 'image/jpeg', caminhoMini(caminho)).catch(() => {});
     }
     campos.fotos = [...fotosAtuais, ...enviadas];
     await dados.salvar(editando?.id, campos);
     if (pdfAntigo && (pdf || removerPdf)) dados.removerArquivos(B_PDF, [pdfAntigo]).catch(() => {});
-    dados.removerArquivos(B_FOTOS, fotosAntigas.filter((p) => !fotosAtuais.includes(p))).catch(() => {});
+    dados.removerArquivos(B_FOTOS, comMiniaturas(fotosAntigas.filter((p) => !fotosAtuais.includes(p)))).catch(() => {});
     $('dialogo').close();
     await recarregar();
   } catch (e) {
     if (pdfNovo) dados.removerArquivos(B_PDF, [pdfNovo]).catch(() => {});
-    dados.removerArquivos(B_FOTOS, enviadas).catch(() => {});
+    dados.removerArquivos(B_FOTOS, comMiniaturas(enviadas)).catch(() => {});
     erro(erroAmigavel(e));
   } finally { $('salvar').disabled = false; $('salvar').textContent = 'Salvar'; }
 };
@@ -566,7 +622,7 @@ $('form-login').onsubmit = async (ev) => {
 $('novo').onclick = () => abrirForm();
 $('cancelar').onclick = () => $('dialogo').close();
 $('busca').oninput = desenhar;
-$('sair').onclick = async () => { await dados.sair(); await mostrarTela(); };
+$('sair').onclick = async () => { limparCacheUrls(); await dados.sair(); await mostrarTela(); };
 $('aviso-demo').hidden = !demo;
 
 mostrarTela();

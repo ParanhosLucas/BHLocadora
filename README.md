@@ -13,7 +13,7 @@ Sem configurar o Supabase, os dados ficam só no navegador (localStorage). Serve
 
 ### 1. Banco e login (Supabase)
 1. Crie um projeto em supabase.com.
-2. **SQL Editor → New query**: cole o conteúdo de `supabase/schema.sql` e rode. Ele também cria os espaços privados `contratos` (PDFs de até 10 MB) e `fotos` (até 8 por carro; o site reduz cada foto para JPEG antes de enviar). O arquivo pode ser rodado de novo sem problema.
+2. **SQL Editor → New query**: cole o conteúdo de `supabase/schema.sql` e rode. Ele também cria os espaços privados `contratos` (PDFs de até 10 MB) e `fotos` (até 8 por carro; o site reduz cada foto para JPEG e cria uma miniatura de ~15 KB para a lista, para gastar pouco tráfego). O arquivo pode ser rodado de novo sem problema.
 3. **Authentication → Users → Add user**: crie seu e-mail e senha (marque *Auto Confirm*).
 4. **Authentication → Sign In / Providers → Email**: **desative "Allow new users to sign up"**.
    Sem isso, qualquer pessoa que descubra a URL do site poderia criar uma conta e ver a frota.
