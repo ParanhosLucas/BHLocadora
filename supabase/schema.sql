@@ -17,3 +17,8 @@ drop policy if exists "somente logados" on public.carros;
 create policy "somente logados" on public.carros
   for all to authenticated
   using (true) with check (true);
+
+-- Permissões explícitas: só o papel "authenticated" (usuário logado) acessa a tabela.
+-- O papel "anon" (visitante sem login) não recebe nenhuma permissão.
+grant usage on schema public to authenticated;
+grant select, insert, update, delete on public.carros to authenticated;
