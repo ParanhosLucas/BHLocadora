@@ -232,10 +232,16 @@ async function baixarArquivo(bucket, caminho, nome) {
   try {
     const url = await dados.urlDownload(bucket, caminho, nome);
     if (!url) throw new Error('Não foi possível baixar o arquivo. No modo demonstração ele só fica disponível até recarregar a página.');
-    const a = el('a', { href: url, download: nome, rel: 'noopener' });
-    document.body.append(a);
-    a.click();
-    a.remove();
+    if (url.startsWith('blob:')) { // modo demonstração: arquivo local
+      const a = el('a', { href: url, download: nome, rel: 'noopener' });
+      document.body.append(a);
+      a.click();
+      a.remove();
+    } else {
+      // O link do Storage já responde como anexo ("Content-Disposition: attachment"). Navegar até ele baixa o arquivo
+      // sem sair da página e funciona no celular; um clique programático depois de esperar a rede é bloqueado pelo Safari do iPhone.
+      window.location.assign(url);
+    }
   } catch (e) { alert(erroAmigavel(e)); }
 }
 // Nome do arquivo baixado: o original, com a extensão do que foi guardado (foto vira .jpg ao enviar).
