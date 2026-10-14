@@ -50,5 +50,23 @@ label.marcar { display: flex; align-items: center; gap: 8px; color: var(--texto)
 input[type=checkbox] { display: inline-block; width: auto; margin: 0; accent-color: var(--marca); }
 input[type=file] { color: var(--suave); }
 button:disabled { opacity: .6; cursor: wait; }
+.rotulo { display: block; font-size: .9rem; color: var(--suave); margin: 12px 0 6px; }
+.fotos-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; }
+.fotos-grade:empty { display: none; }
+.foto-item { position: relative; aspect-ratio: 4 / 3; border-radius: 8px; overflow: hidden; background: var(--campo); border: 1px solid var(--borda); }
+.foto-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.foto-item .x { position: absolute; top: 4px; right: 4px; width: 26px; height: 26px; padding: 0; border-radius: 50%; background: rgba(0,0,0,.75); color: #fff; font-size: 1rem; line-height: 1; }
+.fotos-barra { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
+.fotos-barra .resumo { margin: 0; }
+td.foto-celula { width: 1%; padding-right: 0; }
+.mini { position: relative; display: block; padding: 0; width: 64px; height: 48px; border-radius: 8px; overflow: hidden; background: var(--campo); border: 1px solid var(--borda); }
+.mini img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.mini .mais { position: absolute; right: 2px; bottom: 2px; padding: 0 5px; border-radius: 999px; font-size: .7rem; font-weight: 700; background: var(--marca); color: var(--sobre-marca); }
+.sem-foto { color: var(--suave); display: inline-block; width: 64px; text-align: center; }
+dialog.grande { width: min(900px, calc(100vw - 24px)); }
+.gal-topo { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px; }
+#gal-img { display: block; width: 100%; max-height: calc(100vh - 190px); object-fit: contain; background: #000; border-radius: 8px; }
+.gal-nav { display: flex; justify-content: center; align-items: center; gap: 16px; margin-top: 10px; }
+.gal-nav button { font-size: 1.3rem; padding: 4px 18px; }
 .acoes { display: flex; justify-content: flex-end; gap: 8px; }
 @media (max-width: 480px) { .marca img { height: 52px; } }

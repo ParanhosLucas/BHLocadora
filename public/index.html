@@ -39,7 +39,7 @@
       <div class="tabela-wrap">
         <table>
           <thead>
-            <tr><th>Placa</th><th>Modelo</th><th class="num">Km</th><th>Início</th><th>Término</th><th>Contrato</th><th></th></tr>
+            <tr><th>Foto</th><th>Placa</th><th>Modelo</th><th class="num">Km</th><th>Início</th><th>Término</th><th>Contrato</th><th></th></tr>
           </thead>
           <tbody id="lista"></tbody>
         </table>
@@ -53,6 +53,15 @@
       <label>Placa <input name="placa" required maxlength="8" placeholder="ABC1D23" autocapitalize="characters"></label>
       <label>Modelo <input name="modelo" required maxlength="80" placeholder="Fiat Argo 1.0"></label>
       <label>Km atual <input name="km" type="number" min="0" step="1" required inputmode="numeric"></label>
+      <div class="campo-fotos">
+        <span class="rotulo">Fotos do carro (até 6)</span>
+        <div id="fotos-grade" class="fotos-grade"></div>
+        <div class="fotos-barra">
+          <button type="button" class="sec" id="fotos-botao">+ Adicionar fotos</button>
+          <span id="fotos-contagem" class="resumo"></span>
+        </div>
+        <input id="fotos-input" type="file" accept="image/*" multiple hidden>
+      </div>
       <div class="duas">
         <label>Início do contrato <input name="contrato_inicio" type="date"></label>
         <label>Término do contrato <input name="contrato_fim" type="date"></label>
@@ -66,6 +75,16 @@
         <button type="submit" id="salvar">Salvar</button>
       </div>
     </form>
+  </dialog>
+
+  <dialog id="galeria" class="grande">
+    <div class="gal-topo"><strong id="gal-titulo"></strong><button type="button" class="sec" id="gal-fechar">Fechar</button></div>
+    <img id="gal-img" alt="Foto do carro">
+    <div class="gal-nav">
+      <button type="button" class="sec" id="gal-ant" aria-label="Foto anterior">‹</button>
+      <span id="gal-pos"></span>
+      <button type="button" class="sec" id="gal-prox" aria-label="Próxima foto">›</button>
+    </div>
   </dialog>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>

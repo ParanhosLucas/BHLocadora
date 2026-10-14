@@ -53,3 +53,22 @@ create policy "contratos: somente logados" on storage.objects
   with check (bucket_id = 'contratos');
 
 notify pgrst, 'reload schema';
+
+-- Fotos do carro: lista de caminhos dos arquivos (até 6 por carro, controlado pelo site).
+alter table public.carros add column if not exists fotos text[] not null default '{}';
+
+-- Espaço de armazenamento PRIVADO para fotos (o site reduz cada foto para JPEG antes de enviar).
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('fotos', 'fotos', false, 5242880, array['image/jpeg'])
+on conflict (id) do update
+  set public = false,
+      file_size_limit = excluded.file_size_limit,
+      allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists "fotos: somente logados" on storage.objects;
+create policy "fotos: somente logados" on storage.objects
+  for all to authenticated
+  using (bucket_id = 'fotos')
+  with check (bucket_id = 'fotos');
+
+notify pgrst, 'reload schema';

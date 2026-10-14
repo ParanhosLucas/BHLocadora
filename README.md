@@ -1,6 +1,6 @@
 # BH Locadora
 
-Controle de frota de uma locadora pequena: **placa, modelo, km, datas e PDF do contrato**.
+Controle de frota de uma locadora pequena: **placa, modelo, km, datas, PDF do contrato e fotos do carro**.
 Site estático (HTML/CSS/JS) + banco de dados e login no [Supabase](https://supabase.com). Tudo no plano gratuito.
 
 ## Testar agora (modo demonstração)
@@ -13,7 +13,7 @@ Sem configurar o Supabase, os dados ficam só no navegador (localStorage). Serve
 
 ### 1. Banco e login (Supabase)
 1. Crie um projeto em supabase.com.
-2. **SQL Editor → New query**: cole o conteúdo de `supabase/schema.sql` e rode. Ele também cria o espaço privado `contratos` para os PDFs (até 10 MB cada). O arquivo pode ser rodado de novo sem problema.
+2. **SQL Editor → New query**: cole o conteúdo de `supabase/schema.sql` e rode. Ele também cria os espaços privados `contratos` (PDFs de até 10 MB) e `fotos` (até 6 por carro; o site reduz cada foto para JPEG antes de enviar). O arquivo pode ser rodado de novo sem problema.
 3. **Authentication → Users → Add user**: crie seu e-mail e senha (marque *Auto Confirm*).
 4. **Authentication → Sign In / Providers → Email**: **desative "Allow new users to sign up"**.
    Sem isso, qualquer pessoa que descubra a URL do site poderia criar uma conta e ver a frota.
@@ -30,6 +30,6 @@ Alternativa: GitHub Pages, mas a pasta publicada precisa ser a raiz ou `/docs` (
 ## Segurança
 - Os dados só são lidos/gravados por usuários logados (regra RLS em `schema.sql`).
 - Placa e contrato **não** aparecem em nenhuma página pública: o site inteiro exige login.
-- Os PDFs ficam num espaço **privado** do Supabase: só quem está logado consegue abri-los (o site gera um link temporário de 2 minutos a cada abertura).
+- PDFs e fotos ficam em espaços **privados** do Supabase: só quem está logado os vê (o site gera links temporários).
 - O plano gratuito do Supabase tem 1 GB de armazenamento; confira os limites atuais.
 - O plano gratuito do Supabase pausa projetos sem uso por cerca de 1 semana (confira os termos atuais); basta reativar no painel.
