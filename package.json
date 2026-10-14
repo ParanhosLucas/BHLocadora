@@ -1,0 +1,8 @@
+{
+  "name": "bhlocadora",
+  "version": "1.0.0",
+  "description": "Site de locadora de carros com painel de administração",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" }
+}

@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Admin · BH Locadora</title><link rel="stylesheet" href="/style.css"></head>
+<body>
+<header><h1>🔧 Painel · BH Locadora</h1><span><a href="/">Ver site</a> · <a href="#" id="sair">Sair</a></span></header>
+
+<form id="login" class="login" hidden>
+  <h2>Entrar</h2><label>Senha<input type="password" id="senha" autofocus required></label>
+  <button>Entrar</button><div class="erro" id="loginErro"></div>
+</form>
+
+<main id="painel" hidden>
+  <div class="toolbar"><h2>Frota (<span id="qtd">0</span>)</h2><button id="novo">+ Adicionar carro</button></div>
+  <div id="lista" class="grid"></div>
+  <p id="vazio" class="vazio" hidden>Nenhum carro ainda. Clique em “Adicionar carro”.</p>
+</main>
+
+<dialog id="dlg">
+  <form class="box" id="form" method="dialog">
+    <h2 id="titulo">Novo carro</h2>
+    <label>Modelo *<input id="modelo" required placeholder="Ex.: Fiat Argo 1.0"></label>
+    <label>Placa *<input id="placa" required maxlength="8" placeholder="ABC1D23" style="text-transform:uppercase"></label>
+    <label>Ano *<input id="ano" type="number" required min="1950" max="2100"></label>
+    <label>Tempo de contrato (meses)<input id="meses" type="number" min="1" max="120" placeholder="Ex.: 12"></label>
+    <label>Início do contrato<input id="inicio" type="date"></label>
+    <label>Cliente / locatário<input id="cliente" placeholder="Vazio = disponível"></label>
+    <label class="full">Observações<textarea id="obs" rows="2"></textarea></label>
+    <div class="full"><label>Fotos (várias)<input id="fotos" type="file" accept="image/*" multiple></label><div class="preview" id="prevFotos" style="margin-top:8px"></div></div>
+    <div class="full"><label>Contrato (PDF, Word ou imagem)<input id="contrato" type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"></label>
+      <div id="contratoAtual" class="mut" style="margin-top:6px"></div></div>
+    <div class="erro" id="erro"></div>
+    <div class="full acoes" style="justify-content:flex-end"><button type="button" class="sec" id="cancelar">Cancelar</button><button id="salvar">Salvar</button></div>
+  </form>
+</dialog>
+<div id="lightbox"><img alt=""></div>
+<script src="/app.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+let carros = [], editando = null, manter = [], novasFotos = [], removerContrato = false;
+
+async function req(url, method = 'GET', body) {
+  const r = await fetch(url, { method, headers: body ? { 'Content-Type': 'application/json' } : {}, body: body && JSON.stringify(body) });
+  const d = await r.json().catch(() => ({}));
+  if (r.status === 401 && url !== '/api/login') { mostrar(false); throw new Error('Sessão expirada.'); }
+  if (!r.ok) throw new Error(d.erro || 'Erro inesperado.');
+  return d;
+}
+function mostrar(logado) { $('login').hidden = logado; $('painel').hidden = !logado; if (logado) carregar(); }
+
+$('login').onsubmit = async (e) => {
+  e.preventDefault(); $('loginErro').textContent = '';
+  try { await req('/api/login', 'POST', { senha: $('senha').value }); $('senha').value = ''; mostrar(true); }
+  catch (err) { $('loginErro').textContent = err.message; }
+};
+$('sair').onclick = async (e) => { e.preventDefault(); await req('/api/logout', 'POST').catch(() => {}); mostrar(false); };
+
+async function carregar() {
+  try { carros = await req('/api/admin/carros'); } catch { return; }
+  $('qtd').textContent = carros.length; $('vazio').hidden = carros.length > 0;
+  $('lista').innerHTML = carros.map(cartao).join('');
+}
+
+function fimContrato(c) {
+  if (!c.inicio || !c.meses) return null;
+  const d = new Date(c.inicio + 'T12:00:00'); d.setMonth(d.getMonth() + c.meses); return d;
+}
+function statusContrato(c) {
+  const fim = fimContrato(c);
+  if (!fim) return '';
+  const dias = Math.ceil((fim - new Date()) / 864e5);
+  const data = fim.toLocaleDateString('pt-BR');
+  if (dias < 0) return `<span class="tag vencido">Venceu em ${data}</span>`;
+  if (dias <= 30) return `<span class="tag venc-breve">Vence em ${dias} dia(s) · ${data}</span>`;
+  return `<span class="mut">Termina em ${data} (${dias} dias)</span>`;
+}
+function cartao(c) {
+  const f = c.fotos.map((x) => x.arquivo);
+  return `<article class="card">
+    ${f.length ? `<img class="foto zoom" src="/fotos/${f[0]}" alt="">` : `<div class="semfoto">Sem foto</div>`}
+    ${f.length > 1 ? `<div class="thumbs" style="padding-top:8px">${f.slice(1).map((x) => `<img class="zoom" src="/fotos/${x}" alt="">`).join('')}</div>` : ''}
+    <div class="info"><h3>${esc(c.modelo)}</h3>
+      <span class="mut">Placa <b>${esc(c.placa)}</b> · Ano ${c.ano}</span>
+      <span class="mut">Contrato: ${c.meses ? c.meses + ' meses' : '—'}${c.inicio ? ' · início ' + new Date(c.inicio + 'T12:00:00').toLocaleDateString('pt-BR') : ''}</span>
+      ${c.cliente ? `<span class="mut">Cliente: ${esc(c.cliente)}</span>` : '<span class="tag">Disponível</span>'}
+      ${statusContrato(c)}
+      ${c.contrato ? `<a href="/api/admin/contratos/${c.contrato.arquivo}" target="_blank">📎 ${esc(c.contrato.nome)}</a>` : '<span class="mut">Sem contrato anexado</span>'}
+      <div class="acoes"><button class="sec" onclick="abrir('${c.id}')">Editar</button><button class="bad" onclick="excluir('${c.id}')">Excluir</button></div>
+    </div></article>`;
+}
+
+// Reduz fotos grandes no navegador (máx. 1600px) para economizar espaço.
+function lerFoto(file) {
+  return new Promise((ok, fail) => {
+    const img = new Image(), url = URL.createObjectURL(file);
+    img.onload = () => {
+      const k = Math.min(1, 1600 / Math.max(img.width, img.height));
+      const cv = document.createElement('canvas'); cv.width = img.width * k; cv.height = img.height * k;
+      cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+      URL.revokeObjectURL(url);
+      ok({ nome: file.name.replace(/\.\w+$/, '') + '.jpg', dados: cv.toDataURL('image/jpeg', 0.85) });
+    };
+    img.onerror = () => fail(new Error('Não foi possível ler a imagem ' + file.name));
+    img.src = url;
+  });
+}
+const lerArquivo = (file) => new Promise((ok, fail) => {
+  const r = new FileReader(); r.onload = () => ok({ nome: file.name, dados: r.result }); r.onerror = fail; r.readAsDataURL(file);
+});
+
+function desenharPrev() {
+  $('prevFotos').innerHTML =
+    manter.map((a, i) => `<div class="p"><img src="/fotos/${a}"><button type="button" onclick="manter.splice(${i},1);desenharPrev()">×</button></div>`).join('') +
+    novasFotos.map((f, i) => `<div class="p"><img src="${f.dados}"><button type="button" onclick="novasFotos.splice(${i},1);desenharPrev()">×</button></div>`).join('');
+}
+function desenharContrato() {
+  const c = editando?.contrato;
+  $('contratoAtual').innerHTML = c && !removerContrato
+    ? `Atual: <a href="/api/admin/contratos/${c.arquivo}" target="_blank">${esc(c.nome)}</a> (enviar outro substitui) <a href="#" onclick="removerContrato=true;desenharContrato();return false" style="color:var(--bad)">remover</a>`
+    : (removerContrato ? 'O contrato será removido ao salvar.' : '');
+}
+
+function abrir(id) {
+  editando = carros.find((c) => c.id === id) || null;
+  removerContrato = false; novasFotos = []; manter = editando ? editando.fotos.map((f) => f.arquivo) : [];
+  $('titulo').textContent = editando ? 'Editar carro' : 'Novo carro';
+  const c = editando || {};
+  $('modelo').value = c.modelo || ''; $('placa').value = c.placa || ''; $('ano').value = c.ano || '';
+  $('meses').value = c.meses || ''; $('inicio').value = c.inicio || ''; $('cliente').value = c.cliente || ''; $('obs').value = c.obs || '';
+  $('fotos').value = ''; $('contrato').value = ''; $('erro').textContent = '';
+  desenharPrev(); desenharContrato(); $('dlg').showModal();
+}
+$('novo').onclick = () => abrir(null);
+$('cancelar').onclick = () => $('dlg').close();
+
+$('fotos').onchange = async () => {
+  try { novasFotos.push(...await Promise.all([...$('fotos').files].map(lerFoto))); } catch (e) { $('erro').textContent = e.message; }
+  $('fotos').value = ''; desenharPrev();
+};
+
+$('form').onsubmit = async (e) => {
+  e.preventDefault(); $('erro').textContent = ''; $('salvar').disabled = true;
+  try {
+    const body = {
+      modelo: $('modelo').value, placa: $('placa').value, ano: $('ano').value, meses: $('meses').value,
+      inicio: $('inicio').value, cliente: $('cliente').value, obs: $('obs').value,
+      manterFotos: manter, novasFotos, removerContrato,
+    };
+    if ($('contrato').files[0]) body.novoContrato = await lerArquivo($('contrato').files[0]);
+    if (editando) await req('/api/admin/carros/' + editando.id, 'PUT', body); else await req('/api/admin/carros', 'POST', body);
+    $('dlg').close(); carregar();
+  } catch (err) { $('erro').textContent = err.message; }
+  $('salvar').disabled = false;
+};
+
+async function excluir(id) {
+  const c = carros.find((x) => x.id === id);
+  if (!confirm(`Excluir ${c.modelo} (${c.placa}) com fotos e contrato? Não dá para desfazer.`)) return;
+  try { await req('/api/admin/carros/' + id, 'DELETE'); carregar(); } catch (e) { alert(e.message); }
+}
+
+ligarLightbox();
+fetch('/api/admin/carros').then((r) => mostrar(r.ok));
+</script>
+</body></html>
