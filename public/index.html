@@ -45,7 +45,7 @@
       <div class="tabela-wrap">
         <table>
           <thead>
-            <tr><th>Foto</th><th>Locatário</th><th>Modelo</th><th>Placa</th><th class="num">Km</th><th>Início</th><th>Término</th><th>Contrato</th><th>Vídeo</th><th></th></tr>
+            <tr><th>Locatário</th><th>Foto</th><th>Modelo</th><th>Placa</th><th class="num">Km</th><th>Início</th><th>Término</th><th>Contrato</th><th>Vídeo</th><th></th></tr>
           </thead>
           <tbody id="lista"></tbody>
         </table>
@@ -75,7 +75,7 @@
   <dialog id="dialogo">
     <form id="form-carro" method="dialog">
       <h2 id="titulo-form">Novo carro</h2>
-      <label>Locatário <span class="opcional">(opcional)</span> <input name="locatario" maxlength="120" autocomplete="off"></label>
+      <label>Locatário <input name="locatario" maxlength="120" autocomplete="off"></label>
       <label>Placa <input name="placa" required maxlength="8" autocapitalize="characters"></label>
       <label>Modelo <input name="modelo" required maxlength="80"></label>
       <label>Km atual <input name="km" type="number" min="0" step="1" required inputmode="numeric"></label>

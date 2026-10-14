@@ -9,7 +9,7 @@ body { margin: 0; font: 16px/1.4 system-ui, sans-serif; background: var(--bg); c
 .topo { display: flex; justify-content: space-between; align-items: center; padding: 8px 16px; background: #000; border-bottom: 3px solid var(--marca); }
 .marca { margin: 0; line-height: 0; }
 .marca img { height: 64px; width: auto; display: block; }
-main { max-width: 1100px; margin: 0 auto; padding: 16px; }
+main { max-width: 1320px; margin: 0 auto; padding: 16px; }
 .aviso { background: var(--aviso); color: var(--marca); padding: 10px 16px; font-size: .9rem; }
 .cartao { background: var(--card); border: 1px solid var(--borda); border-radius: 12px; padding: 24px 20px; max-width: 380px; margin: 24px auto; }
 .logo-login { display: block; width: 220px; max-width: 70%; height: auto; margin: 0 auto 12px; }
@@ -29,7 +29,7 @@ a { color: var(--marca); }
 .resumo { color: var(--suave); font-size: .9rem; }
 .tabela-wrap { overflow-x: auto; background: var(--card); border: 1px solid var(--borda); border-radius: 12px; }
 table { width: 100%; border-collapse: collapse; }
-th, td { padding: 12px; text-align: center; border-bottom: 1px solid var(--borda); white-space: nowrap; }
+th, td { padding: 12px 6px; text-align: center; border-bottom: 1px solid var(--borda); white-space: nowrap; }
 tbody tr:hover { background: #222; }
 tr:last-child td { border-bottom: 0; }
 th { font-size: .78rem; letter-spacing: .06em; text-transform: uppercase; color: var(--marca); }
@@ -109,7 +109,7 @@ img { max-width: 100%; }
 }
 
 /* Tablet e celular: cada carro vira um cartão */
-@media (max-width: 860px) {
+@media (max-width: 1070px) {
   main { padding: 12px; }
   .tabela-wrap { background: none; border: 0; overflow: visible; }
   table, tbody { display: block; }
@@ -163,7 +163,7 @@ img { max-width: 100%; }
 /* links da tabela com o mesmo aspecto dos botões "Abrir/Editar" */
 .tabela-wrap td a { display: inline-block; padding: 4px 8px; text-decoration: none; font-weight: 500; }
 @media (pointer: coarse) { .tabela-wrap td a { padding: 10px 12px; } }
-@media (max-width: 860px) { .tabela-wrap td[data-rotulo] a { padding: 0; } }
+@media (max-width: 1070px) { .tabela-wrap td[data-rotulo] a { padding: 0; } }
 
 /* ---------- Vídeo no Google Drive ---------- */
 .google-estado { margin: 12px 0 6px; font-size: .9rem; color: var(--suave); }
@@ -173,7 +173,7 @@ progress { width: 100%; height: 10px; accent-color: var(--marca); }
 
 /* ---------- Documentos: locatário, fotos ---------- */
 .barra.filtros input { margin: 0; flex: 1.4 1 0; min-width: 0; }
-@media (max-width: 860px) {
+@media (max-width: 1070px) {
   .barra.filtros input { flex: 1 1 100%; }
 }
 

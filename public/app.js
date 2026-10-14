@@ -335,8 +335,8 @@ function desenhar() {
       } catch (e) { alert(erroAmigavel(e)); }
     };
     corpo.append(el('tr', {},
-      celulaFoto(c),
       el('td', { className: `locatario${c.locatario ? '' : ' sem-loc'}`, textContent: c.locatario || '—' }),
+      celulaFoto(c),
       el('td', { className: 'modelo', textContent: c.modelo }),
       el('td', { className: 'placa', textContent: c.placa }),
       rotulo(el('td', { className: 'num', textContent: c.km.toLocaleString('pt-BR') }), 'Km'),
