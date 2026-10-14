@@ -123,3 +123,8 @@ alter table public.documentos add constraint documentos_tem_conteudo
   check (arquivo is not null or link is not null);
 
 notify pgrst, 'reload schema';
+
+-- ===== Vídeo enviado direto para o Google Drive: guarda o ID do arquivo no Drive =====
+alter table public.documentos add column if not exists drive_id text;
+
+notify pgrst, 'reload schema';

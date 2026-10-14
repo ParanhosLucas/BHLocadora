@@ -7,6 +7,8 @@ const B_FOTOS = 'fotos';
 const B_DOCS = 'documentos';
 const TIPOS_DOC = ['CRLV (documento do carro)', 'Seguro', 'IPVA', 'Licenciamento', 'Contrato de locação',
   'Vistoria', 'Nota fiscal', 'Manutenção', 'Multa', 'Vídeo (link)', 'Outro'];
+const GOOGLE_ID = cfg.GOOGLE_CLIENT_ID || '';
+const usaDrive = !!GOOGLE_ID; // sem o ID do Google, o envio direto fica desligado
 const TIPO_VIDEO = 'Vídeo (link)'; // guarda só o link (Drive, YouTube...); o arquivo fica fora do Supabase
 const MAX_PDF = 10 * 1024 * 1024; // 10 MB, igual ao limite do bucket
 const MAX_FOTOS = 8;              // fotos por carro
@@ -457,6 +459,127 @@ $('form-carro').onsubmit = async (ev) => {
   } finally { $('salvar').disabled = false; $('salvar').textContent = 'Salvar'; }
 };
 
+// ---------- Google Drive (opcional) ----------
+// O vídeo sobe do celular direto para o Drive de quem está logado, numa pasta do site. O escopo
+// "drive.file" só enxerga/apaga arquivos criados por este site, nunca o resto do Drive.
+const ESCOPO_DRIVE = 'https://www.googleapis.com/auth/drive.file';
+const PASTA_DRIVE = 'BH Locadora Vídeos';
+const API_DRIVE = 'https://www.googleapis.com/drive/v3/files';
+let tokenDrive = null; // só na memória; vale ~1 hora
+const driveConectado = () => !!tokenDrive && tokenDrive.ate > Date.now() + 30000;
+const authDrive = () => ({ Authorization: `Bearer ${tokenDrive.valor}` });
+
+function carregarGoogle() {
+  if (!usaDrive || document.getElementById('gsi')) return;
+  const s = el('script', { id: 'gsi', src: 'https://accounts.google.com/gsi/client', async: true });
+  s.onload = atualizarEstadoGoogle;
+  document.head.append(s);
+}
+
+// Precisa ser chamada direto de um clique, senão o navegador bloqueia a janela do Google.
+function conectarDrive() {
+  return new Promise((ok, falha) => {
+    if (driveConectado()) return ok();
+    if (!window.google?.accounts?.oauth2) return falha(new Error('O login do Google ainda não carregou. Aguarde alguns segundos e tente de novo.'));
+    google.accounts.oauth2.initTokenClient({
+      client_id: GOOGLE_ID,
+      scope: ESCOPO_DRIVE,
+      callback: (r) => {
+        if (r.error) return falha(new Error(r.error === 'access_denied' ? 'Você não autorizou o acesso ao Drive.' : `Erro do Google: ${r.error}`));
+        tokenDrive = { valor: r.access_token, ate: Date.now() + (Number(r.expires_in) || 3000) * 1000 };
+        atualizarEstadoGoogle();
+        ok();
+      },
+      error_callback: (e) => falha(new Error(e?.type === 'popup_closed' ? 'A janela do Google foi fechada antes de terminar.' : 'Não consegui abrir a janela do Google. Permita pop-ups para este site.')),
+    }).requestAccessToken();
+  });
+}
+
+function atualizarEstadoGoogle() {
+  const ok = driveConectado();
+  const estado = $('google-estado');
+  if (!estado) return;
+  estado.textContent = ok ? 'Google Drive: conectado ✓' : 'Google Drive: não conectado. A conexão vale por cerca de 1 hora.';
+  estado.classList.toggle('ok', ok);
+  $('google-conectar').hidden = ok;
+}
+$('google-conectar').onclick = async () => {
+  $('erro-doc').textContent = '';
+  try { await conectarDrive(); } catch (e) { $('erro-doc').textContent = erroAmigavel(e); }
+};
+
+async function erroDrive(r) {
+  if (r.status === 401) { tokenDrive = null; atualizarEstadoGoogle(); return new Error('A conexão com o Google expirou. Toque em "Conectar ao Google Drive" e tente de novo.'); }
+  let msg = '';
+  try { msg = (await r.json())?.error?.message || ''; } catch { /* sem corpo */ }
+  return new Error(`Google Drive recusou (${r.status}). ${msg}`.trim());
+}
+
+async function pastaDrive() {
+  let id = null;
+  try { id = localStorage.getItem('bhl_pasta_drive'); } catch { /* sem armazenamento */ }
+  if (id) {
+    const r = await fetch(`${API_DRIVE}/${encodeURIComponent(id)}?fields=id,trashed`, { headers: authDrive() });
+    if (r.ok && !(await r.json()).trashed) return id;
+  }
+  const q = encodeURIComponent(`name='${PASTA_DRIVE}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
+  const busca = await fetch(`${API_DRIVE}?q=${q}&fields=files(id)`, { headers: authDrive() });
+  if (!busca.ok) throw await erroDrive(busca);
+  id = (await busca.json()).files?.[0]?.id;
+  if (!id) {
+    const r = await fetch(`${API_DRIVE}?fields=id`, { method: 'POST', headers: { ...authDrive(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: PASTA_DRIVE, mimeType: 'application/vnd.google-apps.folder' }) });
+    if (!r.ok) throw await erroDrive(r);
+    id = (await r.json()).id;
+  }
+  try { localStorage.setItem('bhl_pasta_drive', id); } catch { /* sem armazenamento */ }
+  return id;
+}
+
+// Envio em duas etapas: abre uma sessão no Google e manda o arquivo por ela, com barra de progresso.
+async function enviarVideoDrive(arq, nome, aoProgredir) {
+  if (!driveConectado()) throw new Error('Toque em "Conectar ao Google Drive" antes de enviar o vídeo.');
+  const tipo = arq.type || 'video/mp4';
+  const pasta = await pastaDrive();
+  const ini = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id', {
+    method: 'POST',
+    headers: { ...authDrive(), 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': tipo, 'X-Upload-Content-Length': String(arq.size) },
+    body: JSON.stringify({ name: nome, parents: [pasta] }),
+  });
+  if (!ini.ok) throw await erroDrive(ini);
+  const sessao = ini.headers.get('Location');
+  if (!sessao) throw new Error('O Google não devolveu o endereço de envio. Tente de novo.');
+  return new Promise((ok, falha) => {
+    const x = new XMLHttpRequest();
+    x.open('PUT', sessao);
+    x.setRequestHeader('Content-Type', tipo);
+    x.upload.onprogress = (e) => { if (e.lengthComputable) aoProgredir(Math.round((e.loaded / e.total) * 100)); };
+    x.onload = () => {
+      if (x.status < 200 || x.status > 299) return falha(new Error(`Falha no envio do vídeo (${x.status}). Tente de novo.`));
+      try { ok(JSON.parse(x.responseText).id); } catch { falha(new Error('Resposta inesperada do Google. Confira o Drive e tente de novo.')); }
+    };
+    x.onerror = () => falha(new Error('A conexão caiu durante o envio. Tente de novo, de preferência no Wi-Fi.'));
+    x.send(arq);
+  });
+}
+
+// Apaga o arquivo no Drive. Se ele já não existe (404), conta como apagado.
+async function apagarNoDrive(id) {
+  await conectarDrive();
+  const r = await fetch(`${API_DRIVE}/${encodeURIComponent(id)}`, { method: 'DELETE', headers: authDrive() });
+  if (r.ok || r.status === 404) return;
+  throw await erroDrive(r);
+}
+
+function abrirPlayer(d, c) {
+  $('player-titulo').textContent = `${d.tipo} · ${nomeCarro(c)}`;
+  $('player-frame').src = `https://drive.google.com/file/d/${encodeURIComponent(d.drive_id)}/preview`;
+  $('player-drive').href = d.link;
+  $('player').showModal();
+}
+$('player').addEventListener('close', () => { $('player-frame').src = 'about:blank'; }); // para o som ao fechar
+$('player-fechar').onclick = () => $('player').close();
+
 // ---------- Documentos ----------
 const nomeCarro = (c) => (c ? `${c.placa} · ${c.modelo}` : 'Carro removido');
 
@@ -483,14 +606,21 @@ function desenharLembrete() {
   if (!lista.length) return;
   caixa.append(
     el('strong', { textContent: `Vídeos para apagar (${lista.length})` }),
-    el('p', { textContent: 'O contrato destes carros já terminou. Abra o vídeo, apague o arquivo no Google Drive (ou onde estiver) e depois clique em "Já apaguei" para tirar o aviso.' }));
+    el('p', { textContent: 'O contrato destes carros já terminou. Vídeos enviados pelo site podem ser apagados do Drive com um toque; nos de link, apague onde estiverem hospedados e clique em "Já apaguei".' }));
   for (const { d, c } of lista) {
     const dias = -diasAte(c.contrato_fim);
     const ver = el('a', { href: d.link, target: '_blank', rel: 'noopener noreferrer', textContent: 'Abrir vídeo' });
-    const feito = el('button', { type: 'button', className: 'sec', textContent: 'Já apaguei' });
+    const noDrive = !!d.drive_id;
+    const feito = el('button', { type: 'button', className: 'sec', textContent: noDrive ? 'Apagar do Drive' : 'Já apaguei' });
     feito.onclick = async () => {
-      if (!confirm(`Confirma que o vídeo de ${nomeCarro(c)} já foi apagado de onde estava hospedado?\n\nO link será removido do site.`)) return;
-      try { await dados.excluirDocumento(d.id); await recarregar(); } catch (e) { alert(erroAmigavel(e)); }
+      const msg = noDrive ? `Apagar o vídeo de ${nomeCarro(c)} do seu Google Drive e do site?\n\nIsso não pode ser desfeito.`
+        : `Confirma que o vídeo de ${nomeCarro(c)} já foi apagado de onde estava hospedado?\n\nO link será removido do site.`;
+      if (!confirm(msg)) return;
+      try {
+        if (noDrive) await apagarNoDrive(d.drive_id);
+        await dados.excluirDocumento(d.id);
+        await recarregar();
+      } catch (e) { alert(erroAmigavel(e)); }
     };
     caixa.append(el('div', { className: 'lembrete-item' },
       el('span', {}, el('b', { textContent: nomeCarro(c) }), ` · encerrado há ${dias} dia${dias === 1 ? '' : 's'}`),
@@ -520,7 +650,10 @@ function desenharDocs() {
   for (const d of vis) {
     const c = mapa.get(d.carro_id);
     let abrir;
-    if (d.link) abrir = el('a', { href: d.link, target: '_blank', rel: 'noopener noreferrer', textContent: 'Assistir' });
+    if (d.drive_id) {
+      abrir = el('button', { className: 'link', textContent: 'Assistir' });
+      abrir.onclick = () => abrirPlayer(d, c);
+    } else if (d.link) abrir = el('a', { href: d.link, target: '_blank', rel: 'noopener noreferrer', textContent: 'Assistir' });
     else {
       abrir = el('button', { className: 'link', textContent: 'Abrir', title: d.nome_arquivo || '' });
       abrir.onclick = () => abrirArquivo(B_DOCS, d.arquivo);
@@ -529,8 +662,10 @@ function desenharDocs() {
     editar.onclick = () => abrirFormDoc(d);
     const excluir = el('button', { className: 'perigo', textContent: 'Excluir' });
     excluir.onclick = async () => {
-      if (!confirm(`Excluir o documento "${d.tipo}" de ${nomeCarro(c)}?`)) return;
+      const aviso = d.drive_id ? '\n\nO vídeo também será apagado do seu Google Drive.' : '';
+      if (!confirm(`Excluir o documento "${d.tipo}" de ${nomeCarro(c)}?${aviso}`)) return;
       try {
+        if (d.drive_id) await apagarNoDrive(d.drive_id);
         await dados.excluirDocumento(d.id);
         if (d.arquivo) dados.removerArquivos(B_DOCS, [d.arquivo]).catch(() => {});
         await recarregar();
@@ -567,6 +702,8 @@ function abrirFormDoc(d = null) {
   f.validade.value = d?.validade || '';
   f.arquivo.value = '';
   f.link.value = d?.link || '';
+  f.video.value = '';
+  $('video-progresso').hidden = true;
   $('doc-atual').textContent = d?.arquivo ? `Arquivo atual: ${d.nome_arquivo}. Escolher outro arquivo substitui este.` : '';
   $('erro-doc').textContent = '';
   atualizarFormDoc();
@@ -578,6 +715,8 @@ function atualizarFormDoc() {
   const video = tipo === TIPO_VIDEO;
   $('rotulo-arquivo').hidden = video;
   $('rotulo-link').hidden = !video;
+  $('bloco-video').hidden = !(video && usaDrive);
+  atualizarEstadoGoogle();
   $('doc-atual').hidden = video || !$('doc-atual').textContent;
   $('doc-desc-dica').textContent = tipo === 'Outro' ? '(obrigatória)' : '(opcional)';
 }
@@ -612,17 +751,33 @@ $('form-doc').onsubmit = async (ev) => {
   const ehVideo = tipo === TIPO_VIDEO;
   const link = f.link.value.trim();
   const arq = ehVideo ? null : f.arquivo.files[0] || null;
+  const video = ehVideo && usaDrive ? f.video.files[0] || null : null;
   if (!carro_id) return erro('Escolha o carro.');
   if (tipo === 'Outro' && !descricao) return erro('Descreva o documento (ex.: Apólice do seguro).');
-  if (ehVideo) {
-    if (!link) return erro('Cole o link do vídeo (ex.: do Google Drive).');
+  if (ehVideo && video) {
+    if (!video.type.startsWith('video/')) return erro('O arquivo escolhido não é um vídeo.');
+    if (!driveConectado()) return erro('Toque em "Conectar ao Google Drive" antes de enviar o vídeo.');
+  } else if (ehVideo) {
+    if (!link) return erro(usaDrive ? 'Escolha o vídeo para enviar ou cole um link.' : 'Cole o link do vídeo (ex.: do Google Drive).');
     if (!/^https?:\/\//i.test(link)) return erro('O link deve começar com http:// ou https://');
   } else if (!arq && !editandoDoc?.arquivo) return erro('Anexe o arquivo do documento (PDF ou foto).');
   const antigo = editandoDoc?.arquivo || null;
+  const antigoDrive = editandoDoc?.drive_id || null;
   let novo = null;
+  let driveNovo = null;
   $('doc-salvar').disabled = true;
   try {
-    const campos = { carro_id, tipo, descricao: descricao || null, validade, link: ehVideo ? link : null };
+    const campos = { carro_id, tipo, descricao: descricao || null, validade, link: ehVideo ? link : null, drive_id: null };
+    if (ehVideo && video) {
+      const carro = carros.find((c) => c.id === carro_id);
+      const barra = $('video-progresso');
+      barra.hidden = false; barra.value = 0;
+      driveNovo = await enviarVideoDrive(video, `${carro?.placa || 'carro'} - ${tipo} - ${video.name}`, (pct) => {
+        barra.value = pct;
+        $('doc-salvar').textContent = pct < 100 ? `Enviando vídeo… ${pct}%` : 'Finalizando…';
+      });
+      Object.assign(campos, { link: `https://drive.google.com/file/d/${driveNovo}/view`, drive_id: driveNovo });
+    }
     if (ehVideo) Object.assign(campos, { arquivo: null, nome_arquivo: null });
     else if (arq) {
       const p = await prepararDocumento(arq);
@@ -631,12 +786,15 @@ $('form-doc').onsubmit = async (ev) => {
     }
     await dados.salvarDocumento(editandoDoc?.id, campos);
     if (antigo && (novo || ehVideo)) dados.removerArquivos(B_DOCS, [antigo]).catch(() => {}); // arquivo substituído ou trocado por link
+    // vídeo antigo do Drive substituído: apaga se a conexão ainda valer (senão, fica no Drive)
+    if (antigoDrive && antigoDrive !== campos.drive_id && driveConectado()) apagarNoDrive(antigoDrive).catch(() => {});
     $('dialogo-doc').close();
     await recarregar();
   } catch (e) {
     if (novo) dados.removerArquivos(B_DOCS, [novo]).catch(() => {});
+    if (driveNovo && driveConectado()) apagarNoDrive(driveNovo).catch(() => {}); // não deixa vídeo solto no Drive
     erro(erroAmigavel(e));
-  } finally { $('doc-salvar').disabled = false; }
+  } finally { $('doc-salvar').disabled = false; $('doc-salvar').textContent = 'Salvar'; $('video-progresso').hidden = true; }
 };
 
 // ---------- Abas ----------
@@ -674,5 +832,6 @@ $('cancelar').onclick = () => $('dialogo').close();
 $('busca').oninput = desenhar;
 $('sair').onclick = async () => { limparCacheUrls(); await dados.sair(); await mostrarTela(); };
 $('aviso-demo').hidden = !demo;
+carregarGoogle();
 
 mostrarTela();

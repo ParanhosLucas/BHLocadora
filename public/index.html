@@ -109,6 +109,13 @@
       <label>Descrição <span class="opcional" id="doc-desc-dica">(opcional)</span> <input name="descricao" maxlength="120" placeholder="ex.: Apólice Porto Seguro"></label>
       <label>Validade <span class="opcional">(opcional)</span> <input name="validade" type="date"></label>
       <label id="rotulo-arquivo">Arquivo (PDF ou foto, até 10 MB) <input name="arquivo" type="file" accept="application/pdf,.pdf,image/*"></label>
+      <div id="bloco-video" hidden>
+        <p class="google-estado" id="google-estado"></p>
+        <button type="button" class="sec" id="google-conectar">Conectar ao Google Drive</button>
+        <label>Vídeo do celular (vai para o seu Google Drive) <input name="video" type="file" accept="video/*"></label>
+        <progress id="video-progresso" max="100" value="0" hidden></progress>
+        <p class="opcional" id="video-ou">Ou, se o vídeo já está hospedado, cole o link abaixo.</p>
+      </div>
       <label id="rotulo-link" hidden>Link do vídeo (Google Drive, YouTube...) <input name="link" type="url" placeholder="https://drive.google.com/..."></label>
       <p id="doc-atual" class="pdf-atual" hidden></p>
       <p class="erro" id="erro-doc" role="alert"></p>
@@ -117,6 +124,12 @@
         <button type="submit" id="doc-salvar">Salvar</button>
       </div>
     </form>
+  </dialog>
+
+  <dialog id="player" class="grande">
+    <div class="gal-topo"><strong id="player-titulo"></strong><button type="button" class="sec" id="player-fechar">Fechar</button></div>
+    <iframe id="player-frame" title="Vídeo" allow="autoplay; fullscreen" allowfullscreen></iframe>
+    <p class="opcional"><a id="player-drive" target="_blank" rel="noopener noreferrer">Abrir no Google Drive</a> · O vídeo só toca se você estiver logado numa conta Google com acesso a ele.</p>
   </dialog>
 
   <dialog id="galeria" class="grande">

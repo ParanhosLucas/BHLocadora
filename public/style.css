@@ -159,3 +159,10 @@ img { max-width: 100%; }
 .tabela-wrap td a { display: inline-block; padding: 4px 8px; text-decoration: none; font-weight: 500; }
 @media (pointer: coarse) { .tabela-wrap td a { padding: 10px 12px; } }
 @media (max-width: 860px) { .tabela-wrap td[data-rotulo] a { padding: 0; } }
+
+/* ---------- Vídeo no Google Drive ---------- */
+.google-estado { margin: 12px 0 6px; font-size: .9rem; color: var(--suave); }
+.google-estado.ok { color: var(--marca); }
+#bloco-video > button { margin-bottom: 4px; }
+progress { width: 100%; height: 10px; accent-color: var(--marca); }
+#player-frame { display: block; width: 100%; height: min(60vh, 480px); border: 0; border-radius: 8px; background: #000; }
