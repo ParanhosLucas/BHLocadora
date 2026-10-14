@@ -58,7 +58,10 @@ const dados = {
     const caminho = `${crypto.randomUUID()}.${ext}`;
     if (demo) { arquivosDemo.set(caminho, arquivo); return caminho; }
     const { error } = await sb.storage.from(bucket).upload(caminho, arquivo, { contentType: tipo, upsert: false });
-    if (error) throw error;
+    if (error) {
+      if (/bucket not found/i.test(error.message)) throw new Error(`O espaço de arquivos "${bucket}" ainda não existe no Supabase. Rode o SQL de criação (veja o README) e tente de novo.`);
+      throw error;
+    }
     return caminho;
   },
   async removerArquivos(bucket, caminhos) {
