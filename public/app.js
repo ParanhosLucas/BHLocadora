@@ -229,19 +229,46 @@ async function abrirArquivo(bucket, caminho) {
 const abrirPdf = (caminho) => abrirArquivo(B_PDF, caminho);
 
 const TIPOS_POR_EXTENSAO = { pdf: 'application/pdf', jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png' };
-async function baixarArquivo(bucket, caminho, nome) {
+// iPhone/iPad: o Safari ignora o "baixar" e abre o PDF na tela. Lá o caminho que funciona é a folha de compartilhar
+// do sistema ("Salvar em Arquivos").
+const ehIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+async function baixarArquivo(bucket, caminho, nome, botao) {
+  const rotuloOriginal = botao?.textContent;
+  const clickOriginal = botao?.onclick;
+  const restaurar = () => { if (botao) { botao.textContent = rotuloOriginal; botao.disabled = false; botao.onclick = clickOriginal; } };
+  if (botao) { botao.textContent = 'Preparando…'; botao.disabled = true; }
   try {
     const bruto = await dados.obterArquivo(bucket, caminho);
     if (!bruto) throw new Error('Não foi possível baixar o arquivo. No modo demonstração ele só fica disponível até recarregar a página.');
-    // o tipo certo faz o navegador tratar como arquivo (o Safari do iPhone abre na tela quando o tipo vem vazio ou genérico)
+    // o tipo certo faz o navegador tratar como arquivo
     const tipo = TIPOS_POR_EXTENSAO[nome.split('.').pop().toLowerCase()] || bruto.type || 'application/octet-stream';
-    const url = URL.createObjectURL(new Blob([bruto], { type: tipo }));
-    const a = el('a', { href: url, download: nome, rel: 'noopener' });
-    document.body.append(a);
-    a.click();
-    a.remove();
+    const arquivo = new File([bruto], nome, { type: tipo });
+    if (ehIOS() && navigator.canShare?.({ files: [arquivo] })) {
+      try { await navigator.share({ files: [arquivo], title: nome }); restaurar(); return; }
+      catch (e) {
+        if (e?.name === 'AbortError') { restaurar(); return; } // a pessoa fechou a folha de compartilhar
+        // O Safari só abre o compartilhamento direto de um toque; como o arquivo demorou para chegar, pede um segundo toque.
+      }
+      if (botao) {
+        botao.disabled = false;
+        botao.textContent = 'Toque para salvar';
+        botao.onclick = async () => {
+          try { await navigator.share({ files: [arquivo], title: nome }); }
+          catch (e) { if (e?.name !== 'AbortError') alert('Não foi possível abrir o compartilhamento. Use "Exibir" e, na tela do PDF, o botão de compartilhar → "Salvar em Arquivos".'); }
+          restaurar();
+        };
+        return;
+      }
+    }
+    const url = URL.createObjectURL(arquivo);
+    const link = el('a', { href: url, download: nome, rel: 'noopener' });
+    document.body.append(link);
+    link.click();
+    link.remove();
     setTimeout(() => URL.revokeObjectURL(url), 60000);
-  } catch (e) { alert(erroAmigavel(e)); }
+    restaurar();
+  } catch (e) { restaurar(); alert(erroAmigavel(e)); }
 }
 // Nome do arquivo baixado: o original, com a extensão do que foi guardado (foto vira .jpg ao enviar).
 const nomeDownload = (d) => `${(d.nome_arquivo || 'documento').replace(/\.[^./\\]+$/, '')}.${(d.arquivo || '').split('.').pop() || 'pdf'}`;
@@ -787,7 +814,7 @@ function desenharDocs() {
       const exibir = el('button', { className: 'link', textContent: 'Exibir', title: d.nome_arquivo || '' });
       exibir.onclick = () => abrirArquivo(B_DOCS, d.arquivo);
       const baixar = el('button', { className: 'link', textContent: 'Baixar' });
-      baixar.onclick = () => baixarArquivo(B_DOCS, d.arquivo, nomeDownload(d));
+      baixar.onclick = () => baixarArquivo(B_DOCS, d.arquivo, nomeDownload(d), baixar);
       abrir.push(exibir, baixar);
     }
     const editar = el('button', { className: 'link', textContent: 'Editar' });
